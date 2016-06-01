@@ -55,11 +55,14 @@ function TcpSession:parseData(data, len)
 end
 
 function TcpSession:releaseControl()
-	if self.controlCo == coroutine_running() and next(self.pendingWaitCo) ~= nil then
-		--激活队列首部的协程
-		self.controlCo = self.pendingWaitCo[1]
-		table.remove(self.pendingWaitCo, 1)
-		coroutine_wakeup(self.controlCo, "WAIT_RECV_CONTROL")
+	if self.controlCo == coroutine_running() then
+		self.controlCo = nil
+		if next(self.pendingWaitCo) ~= nil then
+			--激活队列首部的协程
+			self.controlCo = self.pendingWaitCo[1]
+			table.remove(self.pendingWaitCo, 1)
+			coroutine_wakeup(self.controlCo, "WAIT_RECV_CONTROL")
+		end
 	end
 end
 

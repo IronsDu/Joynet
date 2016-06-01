@@ -132,7 +132,6 @@ function RedisSession:recvReply()
 				vals[i] = res
 			end
 		end
-
 		return vals
 
 	elseif prefix == 58 then  -- :
@@ -151,7 +150,10 @@ function RedisSession:_do_cmd(...)
 	end
 
 	self:sendRequest(...)
-	return self:recvReply()
+	local _a, _b =  self:recvReply()
+	self.tcpsession:releaseControl()
+	
+	return _a, _b
 end
 
 return {

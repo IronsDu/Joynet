@@ -6,6 +6,8 @@ Joynet 的网络底层使用多线程，但Lua (层面)是运行在单线程上�
 src 目录是此项目源代码, libs 目录为基于此Lua协程网络库开发的一些库
 
 ## 构建
+使用 `git clone`迁出项目并进入项目根目录，并依次使用 `git submodule init`和`git submodule update` 下载依赖项.
+
 * Windows : 在项目根目录中打开 Joynet.sln, 编译即可在当前目录产生可执行文件 Joynet
 * Linux : 在项目根本执行 `make` 即可生成可执行文件 Joynet
 
