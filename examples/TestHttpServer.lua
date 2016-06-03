@@ -5,7 +5,6 @@ local TcpService = require "TcpService"
 local totalRecvNum = 0
 
 function userMain()
-	if true then
 	--开启http服务器
 	local serverService = TcpService:New()
 	serverService:listen("0.0.0.0", 80)
@@ -33,7 +32,7 @@ function userMain()
 					local response = "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: text/html\r\nContent-Length: "..string.len(htmlBody).."\r\n\r\n"..htmlBody
 
 					session:send(response)
-
+					session:postShutdown()
 					totalRecvNum = totalRecvNum + 1
 				end)
 			end

@@ -48,6 +48,10 @@ function TcpSession:postClose()
 	CoreDD:closeTcpSession(self.serviceID, self.socketID)
 end
 
+function TcpSession:postShutdown()
+	CoreDD:shutdownTcpSession(self.serviceID, self.socketID)
+end
+
 function TcpSession:parseData(data, len)
 	self.cacheRecv = self.cacheRecv..data
 	self:wakeupRecv()

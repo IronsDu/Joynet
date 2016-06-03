@@ -13,8 +13,9 @@
 #include "connector.h"
 
 #include "lua_tinker.h"
+#include "NonCopyable.h"
 
-class IdCreator
+class IdCreator : public NonCopyable
 {
 public:
     IdCreator()
@@ -101,7 +102,7 @@ static void luaRuntimeCheck(lua_State *L, lua_Debug *ar)
     }
 }
 
-class CoreDD
+class CoreDD : public NonCopyable
 {
 public:
     CoreDD()
@@ -114,10 +115,39 @@ public:
             mAsyncConnectResultList.ForceSyncWrite();
             mLogicLoop.wakeup();
         });
+
+        createAsyncConnectorThread();
+    }
+
+    ~CoreDD()
+    {
+        destroy();
+    }
+
+    void    destroy()
+    {
+        for (auto& v : mServiceList)
+        {
+            v.second->mTcpService->closeService();
+            v.second->mSessions.clear();
+        }
+        mServiceList.clear();
+
+        mAsyncConnector->destroy();
+
+        mAsyncConnectResultList.clear();
+        mNetMsgList.clear();
+
+        mTimerMgr->Clear();
+        mTimerList.clear();
+    }
+
+    void    createAsyncConnectorThread()
+    {
         mAsyncConnector->startThread();
     }
 
-    void startMonitor()
+    void    startMonitor()
     {
         monitorTime = ox_getnowtime();
     }
@@ -177,7 +207,6 @@ public:
             if (sessionIT != service->mSessions.end())
             {
                 service->mTcpService->shutdown(socketID);
-                service->mSessions.erase(sessionIT);
             }
         }
     }
@@ -325,11 +354,29 @@ private:
             }
             else if (msg->mType == NMT_RECV_DATA)
             {
-                auto client = mServiceList[msg->mServiceID]->mSessions[msg->mID];
-                client->recvData += msg->mData;
+                bool isFind = false;
 
-                int consumeLen = lua_tinker::call<int>(L, "__on_data__", msg->mServiceID, msg->mID, client->recvData, client->recvData.size());
-                client->recvData.erase(0, consumeLen);
+                auto serviceIT = mServiceList.find(msg->mServiceID);
+                if (serviceIT != mServiceList.end())
+                {
+                    auto it = (*serviceIT).second->mSessions.find(msg->mID);
+                    if (it != (*serviceIT).second->mSessions.end())
+                    {
+                        isFind = true;
+
+                        auto client = (*it).second;
+                        client->recvData += msg->mData;
+
+                        int consumeLen = lua_tinker::call<int>(L, "__on_data__", msg->mServiceID, msg->mID, client->recvData, client->recvData.size());
+                        client->recvData.erase(0, consumeLen);
+                    }
+                }
+
+                assert(isFind);
+                if (!isFind)
+                {
+                    std::cout << "not found session id" << msg->mID << std::endl;
+                }
             }
             else if (msg->mType == NMT_CONNECTED)
             {
@@ -419,6 +466,11 @@ int main(int argc, char** argv)
     lua_tinker::set(L, "CoreDD", &coreDD);
 
     lua_tinker::dofile(L, argv[1]);
+
+    lua_close(L);
+    L = nullptr;
+
+    coreDD.destroy();
 
     return 0;
 }
