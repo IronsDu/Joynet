@@ -64,98 +64,98 @@ local RedisSession = {
 }
 
 for i=1,#commands do
-	local cmd = commands[i]
-	RedisSession[cmd] = function (self, ... )
-		return self:_do_cmd(cmd, ...)
-	end
+    local cmd = commands[i]
+    RedisSession[cmd] = function (self, ... )
+        return self:_do_cmd(cmd, ...)
+    end
 end
 
 local function RedisSessionNew(p)
-	local o = {}
-	setmetatable(o, p)
-	p.__index = p
-	
-	o.tcpsession = nil
+    local o = {}
+    setmetatable(o, p)
+    p.__index = p
+    
+    o.tcpsession = nil
 
-	return o
+    return o
 end
 
 function RedisSession:connect(tcpservice, ip, port, timeout)
-	self.tcpsession = tcpservice:connect(ip, port, timeout)
-	return self.tcpsession ~= nil
+    self.tcpsession = tcpservice:connect(ip, port, timeout)
+    return self.tcpsession ~= nil
 end
 
 function RedisSession:sendRequest(...)
-	local request = ""
+    local request = ""
 
-	local args = {...}
-	local nargs = #args
-	request = "*" .. nargs .. "\r\n"
-	for i = 1, nargs do
-		local arg = args[i]
-		if type(arg) ~= "string" then
+    local args = {...}
+    local nargs = #args
+    request = "*" .. nargs .. "\r\n"
+    for i = 1, nargs do
+        local arg = args[i]
+        if type(arg) ~= "string" then
             arg = tostring(arg)
         end
 
-		request = request .. "$" .. #arg .. "\r\n" .. arg .. "\r\n"
-	end
-	self.tcpsession:send(request)
+        request = request .. "$" .. #arg .. "\r\n" .. arg .. "\r\n"
+    end
+    self.tcpsession:send(request)
 end
 
 function RedisSession:recvReply()
 
-	local line = self.tcpsession:receiveUntil("\r\n")
-	if line == nil then
-		return false, "server close"
-	end
+    local line = self.tcpsession:receiveUntil("\r\n")
+    if line == nil then
+        return false, "server close"
+    end
 
-	local prefix = string.byte(line, 1)
-	if prefix == 36 then	-- $
+    local prefix = string.byte(line, 1)
+    if prefix == 36 then    -- $
 
-		local size = tonumber(string.sub(line, 2))
-		local data = self.tcpsession:receive(size)
-		self.tcpsession:receive(2)
-		return data
+        local size = tonumber(string.sub(line, 2))
+        local data = self.tcpsession:receive(size)
+        self.tcpsession:receive(2)
+        return data
 
-	elseif prefix == 43 then  -- +
-		return string.sub(line, 2)
-	elseif prefix == 42 then  -- *
+    elseif prefix == 43 then  -- +
+        return string.sub(line, 2)
+    elseif prefix == 42 then  -- *
 
-		local vals = {}
-		local n = tonumber(string.sub(line, 2))
-		for i=1,n do
-			local res, err = self:recvReply()
-			if res  then
-			elseif res == nil then
-				return nil, err
-			else
-				vals[i] = res
-			end
-		end
-		return vals
+        local vals = {}
+        local n = tonumber(string.sub(line, 2))
+        for i=1,n do
+            local res, err = self:recvReply()
+            if res  then
+            elseif res == nil then
+                return nil, err
+            else
+                vals[i] = res
+            end
+        end
+        return vals
 
-	elseif prefix == 58 then  -- :
-		return tonumber(string.sub(line, 2))
-	elseif prefix == 45 then  -- -
-		return false, string.sub(line, 2)
-	else
-		print("prefix error")
-		return nil, "unkown prefix: " .. tostring(prefix)
-	end
+    elseif prefix == 58 then  -- :
+        return tonumber(string.sub(line, 2))
+    elseif prefix == 45 then  -- -
+        return false, string.sub(line, 2)
+    else
+        print("prefix error")
+        return nil, "unkown prefix: " .. tostring(prefix)
+    end
 end
 
 function RedisSession:_do_cmd(...)
-	if self.tcpsession == nil then
-		return nil , "not connection"
-	end
+    if self.tcpsession == nil then
+        return nil , "not connection"
+    end
 
-	self:sendRequest(...)
-	local _a, _b =  self:recvReply()
-	self.tcpsession:releaseControl()
-	
-	return _a, _b
+    self:sendRequest(...)
+    local _a, _b =  self:recvReply()
+    self.tcpsession:releaseControl()
+    
+    return _a, _b
 end
 
 return {
-	New = function () return RedisSessionNew(RedisSession) end
+    New = function () return RedisSessionNew(RedisSession) end
 }

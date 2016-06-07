@@ -41,13 +41,16 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>$(SolutionDir)\</OutDir>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>$(SolutionDir)\</OutDir>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>..\3rdparty\accumulation-dev\src\net;..\3rdparty\accumulation-dev\src\timer;..\3rdparty\accumulation-dev\src\utils;..\3rdparty\lua_tinker;..\3rdparty\luasrc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -66,7 +69,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>..\3rdparty\accumulation-dev\src\net;..\3rdparty\accumulation-dev\src\timer;..\3rdparty\accumulation-dev\src\utils;..\3rdparty\lua_tinker;..\3rdparty\luasrc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -93,6 +96,7 @@
     <ClCompile Include="..\3rdparty\accumulation-dev\src\utils\buffer.c" />
     <ClCompile Include="..\3rdparty\accumulation-dev\src\utils\connector.cpp" />
     <ClCompile Include="..\3rdparty\accumulation-dev\src\utils\fdset.c" />
+    <ClCompile Include="..\3rdparty\accumulation-dev\src\utils\md5calc.cpp" />
     <ClCompile Include="..\3rdparty\accumulation-dev\src\utils\systemlib.c" />
     <ClCompile Include="..\3rdparty\lua_tinker\lua_tinker.cpp" />
     <ClCompile Include="..\src\Joynet.cpp" />
@@ -110,6 +114,7 @@
     <ClInclude Include="..\3rdparty\accumulation-dev\src\utils\buffer.h" />
     <ClInclude Include="..\3rdparty\accumulation-dev\src\utils\connector.h" />
     <ClInclude Include="..\3rdparty\accumulation-dev\src\utils\fdset.h" />
+    <ClInclude Include="..\3rdparty\accumulation-dev\src\utils\md5calc.h" />
     <ClInclude Include="..\3rdparty\accumulation-dev\src\utils\msgqueue.h" />
     <ClInclude Include="..\3rdparty\accumulation-dev\src\utils\systemlib.h" />
     <ClInclude Include="..\3rdparty\lua_tinker\lua_tinker.h" />

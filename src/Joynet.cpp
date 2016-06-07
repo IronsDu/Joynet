@@ -14,6 +14,7 @@
 
 #include "lua_tinker.h"
 #include "NonCopyable.h"
+#include "md5calc.h"
 
 class IdCreator : public NonCopyable
 {
@@ -424,6 +425,14 @@ private:
 
 };
 
+static std::string luaMd5(const char* str)
+{
+    char digest[1024];
+    memset(digest, 0, sizeof(digest));
+    MD5_String(str, digest);
+    return std::string((const char*)digest, 32);
+}
+
 int main(int argc, char** argv)
 {
     if (argc != 2)
@@ -461,6 +470,8 @@ int main(int argc, char** argv)
 
     lua_tinker::class_def<CoreDD>(L, "addSessionToService", &CoreDD::addSessionToService);
     lua_tinker::class_def<CoreDD>(L, "asyncConnect", &CoreDD::asyncConnect);
+
+    lua_tinker::def(L, "UtilsMd5", luaMd5);
 
     CoreDD coreDD;
     lua_tinker::set(L, "CoreDD", &coreDD);
