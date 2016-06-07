@@ -16,6 +16,9 @@ local function TcpSessionNew(p)
     o.pendingWaitCo = {}
     o.cacheRecv = ""
     o.controlCo = nil
+    o.isWaitLen = true
+    o.waitLen = 0
+    o.waitStr = ""
 
     return o
 end
@@ -54,7 +57,20 @@ end
 
 function TcpSession:parseData(data, len)
     self.cacheRecv = self.cacheRecv..data
-    self:wakeupRecv()
+    if self.recvCo ~= nil then
+        local mustWakeup = false
+        if self.isWaitLen then
+            mustWakeup = string.len(self.cacheRecv) >= self.waitLen
+        else
+            local s, e = string.find(self.cacheRecv, self.waitStr)
+            mustWakeup = s ~= nil
+        end
+
+        if mustWakeup then
+            self:wakeupRecv()
+        end
+    end
+    
     return len
 end
 
@@ -99,6 +115,8 @@ function TcpSession:receive(len, timeout)
     if string.len(self.cacheRecv) < len then
         current.waitType = "WAIT_RECV"
         self.recvCo = current
+        self.isWaitLen = true
+        self.waitLen = len
         coroutine_sleep(self.recvCo, timeout)
         self.recvCo = nil
     end
@@ -142,6 +160,8 @@ function TcpSession:receiveUntil(str, timeout)
     if s == nil then
         current.waitType = "WAIT_RECV"
         self.recvCo = current
+        self.isWaitLen = false
+        self.waitStr = str
         coroutine_sleep(self.recvCo, timeout)
         self.recvCo = nil
     end

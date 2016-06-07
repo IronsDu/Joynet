@@ -153,7 +153,10 @@ function PGSession:_connect(tcpservice, ip, port, timeout, database, user, passw
         return false, "handshake error:"..err
     end
 
-    if typ ~= 'R' then
+    if typ == 'E' and packet ~= nil then
+        local msg = _parse_error_packet(packet)
+        return false,  "handshake failed, error:" .. msg.M
+    elseif typ ~= 'R' then
         return false, "handshake error, got packet type:" .. typ
     end
 
