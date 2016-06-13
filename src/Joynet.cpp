@@ -231,6 +231,7 @@ public:
         auto it = mServiceList.find(serviceID);
         if (it != mServiceList.end())
         {
+            ox_socket_nodelay(fd);
             LuaTcpService::PTR t = (*it).second;
             auto service = (*it).second->mTcpService;
             service->addDataSocket(fd, [=](int64_t id, std::string ip){

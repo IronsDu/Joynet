@@ -164,10 +164,10 @@ function TcpSession:receiveUntil(str, timeout)
         self.waitStr = str
         coroutine_sleep(self.recvCo, timeout)
         self.recvCo = nil
+        s, e = string.find(self.cacheRecv, str)
     end
 
     local ret = nil
-    s, e = string.find(self.cacheRecv, str)
     if s ~= nil then
         ret = string.sub(self.cacheRecv, 1, s-1)
         self.cacheRecv = string.sub(self.cacheRecv, e+1, string.len(self.cacheRecv))
