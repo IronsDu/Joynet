@@ -332,7 +332,6 @@ function PGSession:query(query)
     if self.queryControl ~= nil and self.queryControl ~= current then
 
         --同时只允许一个协程进行query,存在进行中的query时，其他协程需要等待
-        current.waitType = "WAIT_QUERY_CONTROL"
         table.insert(self.pendingQueryCo, current)
 
         while true do   
@@ -350,8 +349,10 @@ function PGSession:query(query)
     table.insert(req, "\0")
     local req_len = string.len(query) + 5
     _send_req(self.tcpsession, req, req_len, 'Q')
+
     local res, err = _read_result(self)
     self.tcpsession:releaseControl()
+
     if self.tcpsession:isClose() then
         self.state = STATE_NONE
         self.tcpsession = nil
@@ -363,7 +364,7 @@ function PGSession:query(query)
             --激活队列首部的协程
             self.queryControl = self.pendingQueryCo[1]
             table.remove(self.pendingQueryCo, 1)
-            coroutine_wakeup(self.queryControl, "WAIT_QUERY_CONTROL")
+            coroutine_wakeup(self.queryControl)
         end
     end
 

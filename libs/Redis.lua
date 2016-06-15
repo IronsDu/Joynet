@@ -125,11 +125,12 @@ function RedisSession:recvReply()
         local n = tonumber(string.sub(line, 2))
         for i=1,n do
             local res, err = self:recvReply()
-            if res  then
+            if res then
+                vals[i] = res
             elseif res == nil then
                 return nil, err
             else
-                vals[i] = res
+                vals[i] = {false, err}
             end
         end
         return vals

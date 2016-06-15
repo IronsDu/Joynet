@@ -14,7 +14,7 @@ function coObject:new(o)
   o = o or {}   
   setmetatable(o, self)
   self.__index = self
-  self.status = "NONE"
+  self.status = 0
   return o
 end
 

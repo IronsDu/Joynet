@@ -36,9 +36,6 @@ function TcpSession:getServer()
     return self.server
 end
 
-function TcpSession:setUnpack(unpackcallabck)
-end
-
 function TcpSession:setClose()
     self.isClosed = true
 end
@@ -81,7 +78,7 @@ function TcpSession:releaseControl()
             --激活队列首部的协程
             self.controlCo = self.pendingWaitCo[1]
             table.remove(self.pendingWaitCo, 1)
-            coroutine_wakeup(self.controlCo, "WAIT_RECV_CONTROL")
+            coroutine_wakeup(self.controlCo)
         end
     end
 end
@@ -99,7 +96,6 @@ function TcpSession:receive(len, timeout)
 
     if self.controlCo ~= nil and self.controlCo ~= current then
         --等待获取控制权
-        current.waitType = "WAIT_RECV_CONTROL"
         table.insert(self.pendingWaitCo, current)
 
         while true do    
@@ -113,7 +109,6 @@ function TcpSession:receive(len, timeout)
     end
 
     if string.len(self.cacheRecv) < len then
-        current.waitType = "WAIT_RECV"
         self.recvCo = current
         self.isWaitLen = true
         self.waitLen = len
@@ -143,7 +138,6 @@ function TcpSession:receiveUntil(str, timeout)
 
     if self.controlCo ~= nil and self.controlCo ~= current then
         --等待获取控制权
-        current.waitType = "WAIT_RECV_CONTROL"
         table.insert(self.pendingWaitCo, current)
 
         while true do    
@@ -158,7 +152,6 @@ function TcpSession:receiveUntil(str, timeout)
 
     local s, e = string.find(self.cacheRecv, str)
     if s == nil then
-        current.waitType = "WAIT_RECV"
         self.recvCo = current
         self.isWaitLen = false
         self.waitStr = str
@@ -178,7 +171,8 @@ end
 
 function TcpSession:wakeupRecv()
     if self.recvCo ~= nil then
-        coroutine_wakeup(self.recvCo, "WAIT_RECV")
+        coroutine_wakeup(self.recvCo)
+        self.recvCo = nil
     end
 end
 

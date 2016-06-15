@@ -1,5 +1,11 @@
 require "Co"
 
+local CO_STATUS_NONE = 1
+local CO_STATUS_ACTIVED = 2
+local CO_STATUS_SLEEP = 3
+local CO_STATUS_YIELD = 4
+local CO_STATUS_DEAD = 5
+
 scheduler =
 {
     active_head = nil,--活动列表头
@@ -22,17 +28,8 @@ function scheduler:init()
 end
 
 
---尝试唤醒uid
-function scheduler:TryWakeup(coObj,ev)
-    if coObj.block then
-        coObj:Signal(ev)
-    end
-end
-
---需要取消睡眠状态
---强制唤醒阻塞在type条件上的纤程
-function scheduler:ForceWakeup(coObj,type)
-    if coObj.status == "SLEEP" and coObj.waitType == type then
+function scheduler:ForceWakeup(coObj)
+    if coObj.status == CO_STATUS_SLEEP then
         self:CancelSleep(coObj)
         self:Add2Active(coObj)
     end
@@ -44,25 +41,25 @@ end
 
 --添加到活动列表中
 function scheduler:Add2Active(coObj)
-    if coObj.status == "NONE" then
-        coObj.status = "ACTIVED"
+    if coObj.status == CO_STATUS_NONE then
+        coObj.status = CO_STATUS_ACTIVED
         table.insert(self.pending_add,coObj)
     end
 end
 
 function scheduler:CancelSleep(coObj)
-    if sc.sleepTimer[coObj.sleepID] ~= nil and coObj.status == "SLEEP" then
+    if sc.sleepTimer[coObj.sleepID] ~= nil and coObj.status == CO_STATUS_SLEEP then
         CoreDD:removeTimer(coObj.sleepID)
         self.sleepTimer[coObj.sleepID] = nil
-        coObj.status = "NONE"
+        coObj.status = CO_STATUS_NONE
     end
 end
 
 
 function __scheduler_timer_callback(id)
     if sc.sleepTimer[id] ~= nil then
-        if sc.sleepTimer[id].status == "SLEEP" then
-            sc.sleepTimer[id].status = "NONE"
+        if sc.sleepTimer[id].status == CO_STATUS_SLEEP then
+            sc.sleepTimer[id].status = CO_STATUS_NONE
             sc:Add2Active(sc.sleepTimer[id])
             sc.sleepTimer[id] = nil
         end
@@ -72,18 +69,18 @@ end
 --睡眠ms
 function scheduler:Sleep(coObj,ms)
     --TODO::让lua tinker支持闭包function
-    if coObj.status == "ACTIVED" and coObj == self.nowRunning then
+    if coObj.status == CO_STATUS_ACTIVED and coObj == self.nowRunning then
         local id = CoreDD:startTimer(ms, "__scheduler_timer_callback")
         coObj.sleepID = id
         self.sleepTimer[id] = coObj
-        coObj.status = "SLEEP"
+        coObj.status = CO_STATUS_SLEEP
         coroutine.yield(coObj.co)
     end
 end
 
 --暂时释放执行权
 function scheduler:Yield(coObj)
-    coObj.status = "YIELD"
+    coObj.status = CO_STATUS_YIELD
     coroutine.yield(coObj.co)
 end
 
@@ -119,12 +116,12 @@ function scheduler:Schedule()
 
         self.nowRunning = nil
         if coroutine.status(cur.co) == "dead" then
-            cur.status = "DEAD"
+            cur.status = CO_STATUS_DEAD
         end
 
         local status = cur.status
         --当纤程处于以下状态时需要从可运行队列中移除
-        if status == "DEAD" or status == "SLEEP" or status == "WAIT4EVENT" or status == "YIELD" then
+        if status == CO_STATUS_DEAD or status == CO_STATUS_SLEEP or status == CO_STATUS_YIELD then
             --删除首元素
             if cur == self.active_head then
                 --同时也是尾元素
@@ -145,7 +142,7 @@ function scheduler:Schedule()
             cur = cur.next_co
             tmp.next_co = nil
             --如果仅仅是让出处理器，需要重新投入到可运行队列中
-            if status == "YIELD" then
+            if status == CO_STATUS_YIELD then
                 self:Add2Active(tmp)
             end
         else
@@ -160,6 +157,7 @@ sc:init()
 
 function coroutine_start(func)
     local coObj = coObject:new()
+    coObject.status = CO_STATUS_NONE
     local co = coroutine.create(func)
     coObj:init(nil, sc, co)
     sc:Add2Active(coObj)
@@ -186,6 +184,6 @@ function coroutine_pengdingnum()
     return #sc.pending_add
 end
 
-function coroutine_wakeup(coObj, waitType)
-    coObj.sc:ForceWakeup(coObj, waitType)
+function coroutine_wakeup(coObj)
+    coObj.sc:ForceWakeup(coObj)
 end
