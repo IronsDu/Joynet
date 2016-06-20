@@ -113,7 +113,7 @@ function PGSession:connect(tcpservice, ip, port, timeout, database, user, passwo
     end
 
     local isOK, err = self:_connect(tcpservice, ip, port, timeout, database, user, password)
-    self.tcpsession:releaseControl()
+    self.tcpsession:releaseRecvLock()
     if not isOK and self.tcpsession ~= nil then
         self.tcpsession:postClose()
         self.tcpsession = nil
@@ -351,7 +351,7 @@ function PGSession:query(query)
     _send_req(self.tcpsession, req, req_len, 'Q')
 
     local res, err = _read_result(self)
-    self.tcpsession:releaseControl()
+    self.tcpsession:releaseRecvLock()
 
     if self.tcpsession:isClose() then
         self.state = STATE_NONE

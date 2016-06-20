@@ -60,6 +60,12 @@ local commands = {
     "zscore",            "zunionstore",       "evalsha"
 }
 
+
+--[[
+允许多个协程同时执行redis command
+但当有一个协程在执行pipeline时，其他协程需要等待
+]]
+
 local RedisSession = {
 }
 
@@ -76,6 +82,8 @@ local function RedisSessionNew(p)
     p.__index = p
     
     o.tcpsession = nil
+    o.pendingWaitPipelineCo = {}
+    o.pipelineCo = nil
 
     return o
 end
@@ -85,21 +93,35 @@ function RedisSession:connect(tcpservice, ip, port, timeout)
     return self.tcpsession ~= nil
 end
 
-function RedisSession:sendRequest(...)
-    local request = ""
-
-    local args = {...}
+local function _gen_req(args)
     local nargs = #args
-    request = "*" .. nargs .. "\r\n"
+
+    local req = {}
+    req[1] = "*" .. nargs .. "\r\n"
+    local nbits = 2
+
     for i = 1, nargs do
         local arg = args[i]
         if type(arg) ~= "string" then
             arg = tostring(arg)
         end
 
-        request = request .. "$" .. #arg .. "\r\n" .. arg .. "\r\n"
+        req[nbits] = "$"
+        req[nbits + 1] = #arg
+        req[nbits + 2] = "\r\n"
+        req[nbits + 3] = arg
+        req[nbits + 4] = "\r\n"
+
+        nbits = nbits + 5
     end
-    self.tcpsession:send(request)
+
+    return req
+end
+
+function RedisSession:sendRequest(req)
+    for i,v in ipairs(req) do
+        self.tcpsession:send(v)
+    end
 end
 
 function RedisSession:recvReply()
@@ -150,11 +172,114 @@ function RedisSession:_do_cmd(...)
         return nil , "not connection"
     end
 
-    self:sendRequest(...)
+    self:waitPipelineCo()
+    local req = _gen_req({...})
+    if self._pipeReqs ~= nil then
+        self._pipeReqs[#self._pipeReqs+1] = req
+        return
+    end
+
+    self:sendRequest(req)
     local _a, _b =  self:recvReply()
-    self.tcpsession:releaseControl()
+    self.tcpsession:releaseRecvLock()
     
+    if self.tcpsession:isClose() then
+        self.tcpsession = nil
+    end
+
     return _a, _b
+end
+
+function RedisSession:waitPipelineCo()
+    local current = coroutine_running()
+    if self.pipelineCo ~= nil and self.pipelineCo ~= current then
+        --等待其他协程的pipeline完成
+        table.insert(self.pendingWaitPipelineCo, current)
+        while true do
+            coroutine_sleep(current, 1000)
+            if self.pipelineCo == nil then
+                break
+            end
+        end
+    end
+end
+
+function RedisSession:releasePipelineLock()
+    if self.pipelineCo == coroutine_running() then
+        self.pipelineCo = nil
+        --唤醒所有等待的co
+        for i,v in ipairs(self.pendingWaitPipelineCo) do
+            coroutine_wakeup(v)
+        end
+        self.pendingWaitPipelineCo = {}
+    end
+end
+
+function RedisSession:initPipeline()
+    self:waitPipelineCo()
+    self._pipeReqs = {}
+    self.pipelineCo = coroutine_running()
+end
+
+function RedisSession:cancelPipeline()
+    if self.pipelineCo == coroutine_running() then
+        self._pipeReqs = nil
+        self:releasePipelineLock()
+    end
+end
+
+function RedisSession:commitPipeline()
+    if self.tcpsession == nil then
+        return nil , "not connection"
+    end
+
+    if self.pipelineCo ~= coroutine_running() then
+        return nil, "error"
+    end
+
+    local reqs = self._pipeReqs
+    if not reqs then
+        return nil, "no pipeline"
+    end
+
+    self._pipeReqs = nil
+
+    for i,v in ipairs(reqs) do
+        self:sendRequest(v)
+    end
+
+    local nvals = 0
+    local nreqs = #reqs
+    local vals = {}
+    local retErr = nil
+
+    for i=1,nreqs do
+        local res, err = self:recvReply()
+        if res then
+            nvals = nvals + 1
+            vals[nvals] = res
+        elseif res == nil then
+            retErr = err
+            break
+        else
+            -- be a valid redis error value
+            nvals = nvals + 1
+            vals[nvals] = {false, err}
+        end
+    end
+
+    self.tcpsession:releaseRecvLock()
+    self:releasePipelineLock()
+    
+    if self.tcpsession:isClose() then
+        self.tcpsession = nil
+    end
+
+    if retErr ~= nil then
+        return nil, retErr
+    end
+
+    return vals
 end
 
 return {

@@ -15,7 +15,7 @@ local function TcpSessionNew(p)
     o.server = nil
     o.pendingWaitCo = {}
     o.cacheRecv = ""
-    o.controlCo = nil
+    o.controlRecvCo = nil
     o.isWaitLen = true
     o.waitLen = 0
     o.waitStr = ""
@@ -71,15 +71,33 @@ function TcpSession:parseData(data, len)
     return len
 end
 
-function TcpSession:releaseControl()
-    if self.controlCo == coroutine_running() then
-        self.controlCo = nil
+function TcpSession:releaseRecvLock()
+    if self.controlRecvCo == coroutine_running() then
+        self.controlRecvCo = nil
         if next(self.pendingWaitCo) ~= nil then
             --激活队列首部的协程
-            self.controlCo = self.pendingWaitCo[1]
+            self.controlRecvCo = self.pendingWaitCo[1]
             table.remove(self.pendingWaitCo, 1)
-            coroutine_wakeup(self.controlCo)
+            coroutine_wakeup(self.controlRecvCo)
         end
+    end
+end
+
+function TcpSession:recvLock()
+    local current = coroutine_running()
+
+    if self.controlRecvCo ~= nil and self.controlRecvCo ~= current then
+        --等待获取控制权
+        table.insert(self.pendingWaitCo, current)
+
+        while true do    
+            coroutine_sleep(current, timeout)
+            if self.controlRecvCo == current then
+                break
+            end
+        end
+    else
+        self.controlRecvCo = current
     end
 end
 
@@ -92,24 +110,10 @@ function TcpSession:receive(len, timeout)
         return nil
     end
 
-    local current = coroutine_running()
-
-    if self.controlCo ~= nil and self.controlCo ~= current then
-        --等待获取控制权
-        table.insert(self.pendingWaitCo, current)
-
-        while true do    
-            coroutine_sleep(current, timeout)
-            if self.controlCo == current then
-                break
-            end
-        end
-    else
-        self.controlCo = current
-    end
+    self:recvLock()
 
     if string.len(self.cacheRecv) < len then
-        self.recvCo = current
+        self.recvCo = coroutine_running()
         self.isWaitLen = true
         self.waitLen = len
         coroutine_sleep(self.recvCo, timeout)
@@ -134,25 +138,11 @@ function TcpSession:receiveUntil(str, timeout)
         return nil
     end
 
-    local current = coroutine_running()
-
-    if self.controlCo ~= nil and self.controlCo ~= current then
-        --等待获取控制权
-        table.insert(self.pendingWaitCo, current)
-
-        while true do    
-            coroutine_sleep(current, timeout)
-            if self.controlCo == current then
-                break
-            end
-        end
-    else
-        self.controlCo = current
-    end
+    self:recvLock()
 
     local s, e = string.find(self.cacheRecv, str)
     if s == nil then
-        self.recvCo = current
+        self.recvCo = coroutine_running()
         self.isWaitLen = false
         self.waitStr = str
         coroutine_sleep(self.recvCo, timeout)
