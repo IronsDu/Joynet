@@ -1,4 +1,4 @@
-require "scheduler"
+require "Scheduler"
 local AsyncConnect = require "Connect"
 local TcpSession = require "TcpSession"
 
