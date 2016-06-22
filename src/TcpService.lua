@@ -82,7 +82,7 @@ function TcpService:createService()
             server.connectedSessions[uid] = session
             server.sessions[socketID] = session
             self.connectedCo[uid] = nil
-            coroutine_wakeup(waitCo, "WAIT_ESTABLISH")
+            coroutine_wakeup(waitCo)
         else
             CoreDD:closeTcpSession(serviceID, socketID)
         end
@@ -115,7 +115,7 @@ function TcpService:connect(ip, port, timeout)
             local waitCo = server.connectedCo[uid]
             if waitCo ~= nil then
                 self.connectedCo[uid] = nil
-                coroutine_wakeup(waitCo, "WAIT_ESTABLISH")
+                coroutine_wakeup(waitCo)
             end
         else
             CoreDD:addSessionToService(server.serviceID, fd, uid)
@@ -123,9 +123,7 @@ function TcpService:connect(ip, port, timeout)
     end)
 
     server.connectedCo[uid] = coroutine_running()
-    local co = coroutine_running()
-    co.waitType = "WAIT_ESTABLISH"
-    coroutine_sleep(co, timeout)
+    coroutine_sleep(coroutine_running(), timeout)
     --寻找uid对应的session
     local session = self.connectedSessions[uid]
     self.connectedSessions[uid] = nil
@@ -144,7 +142,6 @@ function TcpService:accept(timeout)
 
     self.acceptCo = coroutine_running()
     if next(self.acceptSessions) == nil then
-        self.acceptCo.waitType = "WAIT_ACCEPT"
         coroutine_sleep(self.acceptCo, timeout)
         hasData = next(self.acceptSessions) ~= nil
     else
@@ -163,7 +160,8 @@ end
 
 function TcpService:wakeupAccept()
     if self.acceptCo ~= nil then
-        coroutine_wakeup(self.acceptCo, "WAIT_ACCEPT")
+        coroutine_wakeup(self.acceptCo)
+        self.acceptCo = nil
     end
 end
 
