@@ -5,6 +5,7 @@
 
 #include "systemlib.h"
 #include "SocketLibFunction.h"
+#include "ox_file.h"
 
 #include "EventLoop.h"
 #include "DataSocket.h"
@@ -226,15 +227,17 @@ public:
         }
     }
 
-    void    addSessionToService(int serviceID, sock fd, int64_t uid)
+    bool    addSessionToService(int serviceID, sock fd, int64_t uid, bool useSSL)
     {
+        bool ret = false;
+
         auto it = mServiceList.find(serviceID);
         if (it != mServiceList.end())
         {
             ox_socket_nodelay(fd);
             LuaTcpService::PTR t = (*it).second;
             auto service = (*it).second->mTcpService;
-            service->addDataSocket(fd, [=](int64_t id, std::string ip){
+            ret = service->addDataSocket(fd, [=](int64_t id, std::string ip){
                 NetMsg* msg = new NetMsg(t->mServiceID, NMT_CONNECTED, id);
                 std::string uidStr = std::to_string(uid);
                 msg->setData(uidStr.c_str(), uidStr.size());
@@ -243,8 +246,10 @@ public:
                 unlockMsgList();
 
                 mLogicLoop.wakeup();
-            }, service->getDisconnectCallback(), service->getDataCallback(), false, 1024 * 1024, false);
+            }, service->getDisconnectCallback(), service->getDataCallback(), useSSL, 1024 * 1024, false);
         }
+
+        return ret;
     }
 
     int64_t asyncConnect(const char* ip, int port, int timeout)
@@ -434,6 +439,25 @@ static std::string luaMd5(const char* str)
     return std::string((const char*)digest, 32);
 }
 
+static std::string GetIPOfHost(const char* host)
+{
+    std::string ret;
+
+    struct hostent *hptr = gethostbyname(host);
+    if (hptr != NULL)
+    {
+        if (hptr->h_addrtype == AF_INET || hptr->h_addrtype == AF_INET6)
+        {
+            char* lll = *(hptr->h_addr_list);
+            char tmp[1024];
+            sprintf(tmp, "%d.%d.%d.%d", lll[0] & 0x00ff, lll[1] & 0x00ff, lll[2] & 0x00ff, lll[3] & 0x00ff);
+            ret = tmp;
+        }
+    }
+
+    return ret;
+}
+
 int main(int argc, char** argv)
 {
     if (argc != 2)
@@ -443,9 +467,15 @@ int main(int argc, char** argv)
     }
 
     ox_socket_init();
+#ifdef USE_OPENSSL
+    SSL_library_init();
+    OpenSSL_add_all_algorithms();
+    SSL_load_error_strings();
+#endif
 
     L = luaL_newstate();
     luaopen_base(L);
+    luaopen_utf8(L);
     luaL_openlibs(L);
     lua_tinker::init(L);
 
@@ -473,6 +503,8 @@ int main(int argc, char** argv)
     lua_tinker::class_def<CoreDD>(L, "asyncConnect", &CoreDD::asyncConnect);
 
     lua_tinker::def(L, "UtilsMd5", luaMd5);
+    lua_tinker::def(L, "GetIPOfHost", GetIPOfHost);
+    lua_tinker::def(L, "UtilsCreateDir", ox_dir_create);
 
     CoreDD coreDD;
     lua_tinker::set(L, "CoreDD", &coreDD);

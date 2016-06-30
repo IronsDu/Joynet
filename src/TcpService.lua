@@ -107,18 +107,25 @@ function TcpService:listen(ip, port)
     end
 end
 
-function TcpService:connect(ip, port, timeout)
+function TcpService:connect(ip, port, timeout, useOpenSSL)
+    if useOpenSSL == nil then
+        useOpenSSL = false
+    end
+    
     local server = self
 
     local uid = AsyncConnect.AsyncConnect(ip, port, timeout, function (fd, uid)
-        if fd == -1 then
+        local isFailed = fd == -1
+        if not isFailed then
+            isFailed = not CoreDD:addSessionToService(server.serviceID, fd, uid, useOpenSSL)
+        end
+
+        if isFailed then
             local waitCo = server.connectedCo[uid]
             if waitCo ~= nil then
                 self.connectedCo[uid] = nil
                 coroutine_wakeup(waitCo)
             end
-        else
-            CoreDD:addSessionToService(server.serviceID, fd, uid)
         end
     end)
 
