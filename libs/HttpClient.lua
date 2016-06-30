@@ -11,8 +11,15 @@ local function setRequestHost(request, host)
 end
 
 local function addRequestArg(request, k, v)
-    table.insert(request.arg_ks, k)
-    table.insert(request.arg_vs, v)
+    if string.len(request.argsStr) > 0 then
+        request.argsStr = request.argsStr .. "&"
+    end
+
+    if k ~= nil then
+        request.argsStr = request.argsStr..k.."="..v
+    else
+        request.argsStr = request.argsStr..v
+    end
 end
 
 local function addRequestHeadValue(request, k, v)
@@ -23,30 +30,31 @@ end
 -- 根据request表构造http 报文
 local function buildRequestData(request)
     local tmpUrl = request.url
-    local questionMark = ""
-    local allArgsStr = ""
+    local r = ""
+
     if request.t ~= "POST" then
-        if next(request.arg_ks) ~= nil then
+        local questionMark = ""
+        if string.len(request.argsStr) > 0 then
             questionMark = "?"
         end
-        for i,v in ipairs(request.arg_ks) do
-            allArgsStr = allArgsStr .. v.."="..request.arg_vs[i]
-            if i ~= #request.arg_ks then
-                allArgsStr = allArgsStr.."&"
-            end
-        end
+        r = request.t.." "..request.url..questionMark..request.argsStr.." ".."HTTP/1.1".."\r\n"
+    else
+        r = request.t.." "..request.url.." ".."HTTP/1.1".."\r\n"
     end
 
-    local r = request.t.." "..request.url..questionMark..allArgsStr.." ".."HTTP/1.1".."\r\n"
-    
     r = r.."Host: "..request.host.."\r\n"
     for i,v in ipairs(request.head_ks) do
         r = r..v..": "..request.head_vs[i].."\r\n"
     end
+
+    if request.t == "POST" then
+        r = r.."Content-Length: "..string.len(request.argsStr).."\r\n"
+    end
+
     r = r.."\r\n"
 
     if request.t == "POST" then
-        r = r..allArgsStr.."\r\n"
+        r = r..request.argsStr
     end
 
     return r
@@ -63,17 +71,20 @@ local function request_http(service, ip, port, useSSL, _type, _url, _host, _args
 
         -- 构造http request 对象
         local request = {}
+        request.argsStr = ""
         request.head_ks = {}
         request.head_vs = {}
-        request.arg_ks = {}
-        request.arg_vs = {}
         setHttpType(request, _type)
         setRequestUrl(request, _url)
         setRequestHost(request, _host)
 
         if _args ~= nil then
-            for k,v in pairs(_args) do
-                addRequestArg(request, k, v)
+            if type(_args) == "table" then
+                for k,v in pairs(_args) do
+                    addRequestArg(request, k, v)
+                end
+            else
+                addRequestArg(request, nil, tostring(_args))
             end
         end
 
@@ -89,7 +100,6 @@ local function request_http(service, ip, port, useSSL, _type, _url, _host, _args
 
         -- 开始读取(解析)http response
         local packet = session:receiveUntil("\r\n", 10000)
-        
         local content_len = 0
         local isChunked = false
 
@@ -151,6 +161,8 @@ local function request_http(service, ip, port, useSSL, _type, _url, _host, _args
         end
 
         session:postClose()
+    else
+        print("connect ".._url..", ip:"..ip..", port:"..port.." failed")
     end
 
     return response

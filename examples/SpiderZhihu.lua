@@ -52,6 +52,16 @@ local function requestPic(clientService, pic_url, dirname, qoffset)
     end
 end
 
+local function urlEnCode(w)
+    local pattern="[^%w%d%._%-%* ]"  
+    s=string.gsub(w,pattern,function(c)  
+        local c=string.format("%%%02X",string.byte(c))  
+        return c  
+    end)  
+    s=string.gsub(s," ","+")  
+    return s  
+end  
+
 -- 访问问题页面
 local function requestQuestion(clientService, question_url, dirname, qoffset)
     UtilsCreateDir(ZhihuConfig.saveDir.."\\"..dirname)
@@ -68,6 +78,7 @@ local function requestQuestion(clientService, question_url, dirname, qoffset)
 
     local response = HttpClient.Request(clientService, zhihuAddres, 443, true, "GET", question_url, "www.zhihu.com")
     if response ~= nil then
+        --问题页面的response只包含最多10个回答的内容
         for _,picType in ipairs(picTypes) do
             local pos = 1
 
@@ -89,23 +100,70 @@ local function requestQuestion(clientService, question_url, dirname, qoffset)
 
                     pos = e
                 else
-                    print("no more pic in question "..question_url)
                     break
                 end
             end
         end
+
+        --拉去此问题的后续所有回答
+        local s,e = string.find(question_url, "question/")
+        if s ~= nil then
+            local question_id = string.sub(question_url, e+1)
+            local offset = 10
+            while true do
+                local paramsUrlCode = urlEnCode("{\"url_token\":"..question_id..",\"pagesize\":10,\"offset\":"..offset.."}")
+
+                local response = HttpClient.Request(clientService, zhihuAddres, 443, true, "POST", "/node/QuestionAnswerListV2", "www.zhihu.com", {method="next", params=paramsUrlCode},
+                    {["Content-Type"]= "application/x-www-form-urlencoded; charset=UTF-8"})
+                if response ~= nil then
+                    if string.find(response, "Bad Request") ~= nil then
+                        break
+                    end
+
+                    if string.len(response) <= 50 then
+                        break
+                    else
+                        for _,picType in ipairs(picTypes) do
+                            local pos = 1
+                            while true do
+                                --TODO (优化匹配代码以及图片后缀)
+                                --查找此问题页面中的图片地址
+                                --https:\/\/pic4.zhimg.com\/5c2b9c18ca49a03995a62975393e0c87_200x112.png
+
+                                local s, e = string.find(response, "https:\\%/\\%/pic%d.zhimg.com\\%/%w*%_r%."..picType, pos)
+
+                                if s ~= nil then
+                                    local pic_url = string.sub(response, s, e)
+                                    local _a , _b = string.find(pic_url, "pic")
+                                    local _c, _d = string.find(pic_url, "com")
+
+                                    pic_url = "https://"..string.sub(pic_url, _a, _d)..string.sub(pic_url, _d+2, string.len(pic_url))
+
+                                    if not requestdPic[pic_url] then
+                                        requestdPic[pic_url] = true
+                                        requestedPicNum = requestedPicNum + 1
+                                        singleCo(function ()
+                                                --访问图片
+                                                requestPic(clientService, pic_url, dirname, qoffset)
+                                            end)
+                                    end
+
+                                    pos = e
+                                else
+                                    break
+                                end
+                            end
+                        end
+                    end
+                else
+                    break
+                end
+
+                offset = offset + 10
+            end
+        end
     end
 end
-
-local function urlEnCode(w)
-    local pattern="[^%w%d%._%-%* ]"  
-    s=string.gsub(w,pattern,function(c)  
-        local c=string.format("%%%02X",string.byte(c))  
-        return c  
-    end)  
-    s=string.gsub(s," ","+")  
-    return s  
-end  
 
 local isAllCompleted = false
 
