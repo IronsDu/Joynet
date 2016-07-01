@@ -14,17 +14,6 @@ local zhihuAddres = GetIPOfHost("www.zhihu.com")
 local picAddres = {}    --pic http 服务器ip地址集合,key 为域名
 UtilsCreateDir(ZhihuConfig.saveDir)
 
-local function singleCo(f)
-    -- 不开启协程,因为经过测试发现，同时开多个链接到zhihu时，速度反而下降，通过访问百度进行对比，发现可能是zhihu服务器(故意)设置锁导致的
-    if false then
-        coroutine_start(function ()
-            f()
-        end)
-    else
-        f()
-    end
-end
-
 -- 访问图片地址,下载成功则保存到文件
 local function requestPic(clientService, pic_url, dirname, qoffset)
     local s,e = string.find(pic_url, "https:%/%/")
@@ -60,13 +49,40 @@ local function urlEnCode(w)
     end)  
     s=string.gsub(s," ","+")  
     return s  
-end  
+end
+
+
+local picCos = {}
+
+local function ControlConcurrentRequestPic(clientService, pic_url, dirname, qoffset)
+    while true do
+        local num = 0
+        local tmp = {}
+        for i,v in ipairs(picCos) do
+            if v.co ~= nil and coroutine.status(v.co) ~= "dead" then
+                table.insert(tmp, v)
+            end
+        end
+
+        picCos = tmp
+
+        if #picCos < ZhihuConfig.MaxConcurrentPicNum then
+            break
+        else
+            coroutine_sleep(coroutine_running(), 5)    --TODO::提供锁原语,并想办法加快唤醒
+        end
+    end
+
+    local picCo = coroutine_start(function ()
+            requestPic(clientService, pic_url, dirname, qoffset)
+        end)
+    table.insert(picCos, picCo)
+end
 
 -- 访问问题页面
 local function requestQuestion(clientService, question_url, dirname, qoffset)
     UtilsCreateDir(ZhihuConfig.saveDir.."\\"..dirname)
     UtilsCreateDir(ZhihuConfig.saveDir.."\\"..dirname.."\\"..qoffset)
-
 
     local fname = ZhihuConfig.saveDir.."\\"..dirname.."\\".."questions_address.txt"
     print(fname)
@@ -76,91 +92,62 @@ local function requestQuestion(clientService, question_url, dirname, qoffset)
     f:close()
     f=nil
 
-    local response = HttpClient.Request(clientService, zhihuAddres, 443, true, "GET", question_url, "www.zhihu.com")
-    if response ~= nil then
-        --问题页面的response只包含最多10个回答的内容
-        for _,picType in ipairs(picTypes) do
-            local pos = 1
+    local s,e = string.find(question_url, "question/")
+    if s ~= nil then
+        local question_id = string.sub(question_url, e+1)
+        local offset = 1
+        while true do
+            local paramsUrlCode = urlEnCode("{\"url_token\":"..question_id..",\"pagesize\":10,\"offset\":"..offset.."}")
 
-            while true do
-                --TODO (优化匹配代码以及图片后缀)
-                --查找此问题页面中的图片地址
-                local s, e = string.find(response, "https:%/%/pic%d.zhimg.com%/%w*%_r%."..picType, pos)
-
-                if s ~= nil then
-                    local pic_url = string.sub(response, s, e)
-                    if not requestdPic[pic_url] then
-                        requestdPic[pic_url] = true
-                        requestedPicNum = requestedPicNum + 1
-                        singleCo(function ()
-                                --访问图片
-                                requestPic(clientService, pic_url, dirname, qoffset)
-                            end)
-                        end
-
-                    pos = e
-                else
+            local response = HttpClient.Request(clientService, zhihuAddres, 443, true, "POST", "/node/QuestionAnswerListV2", "www.zhihu.com", {method="next", params=paramsUrlCode},
+                {["Content-Type"]= "application/x-www-form-urlencoded; charset=UTF-8"})
+            if response ~= nil then
+                if string.find(response, "Bad Request") ~= nil then
                     break
                 end
-            end
-        end
 
-        --拉去此问题的后续所有回答
-        local s,e = string.find(question_url, "question/")
-        if s ~= nil then
-            local question_id = string.sub(question_url, e+1)
-            local offset = 10
-            while true do
-                local paramsUrlCode = urlEnCode("{\"url_token\":"..question_id..",\"pagesize\":10,\"offset\":"..offset.."}")
+                if string.len(response) <= 50 then
+                    break
+                else
+                    --TODO (优化匹配代码以及图片后缀)
+                    --查找此问题页面中的图片地址
+                    --https:\/\/pic4.zhimg.com\/5c2b9c18ca49a03995a62975393e0c87_200x112.png
+                    for _,picType in ipairs(picTypes) do
+                        local pos = 1
+                        while true do
 
-                local response = HttpClient.Request(clientService, zhihuAddres, 443, true, "POST", "/node/QuestionAnswerListV2", "www.zhihu.com", {method="next", params=paramsUrlCode},
-                    {["Content-Type"]= "application/x-www-form-urlencoded; charset=UTF-8"})
-                if response ~= nil then
-                    if string.find(response, "Bad Request") ~= nil then
-                        break
-                    end
+                            local s, e = string.find(response, "https:\\%/\\%/pic%d.zhimg.com\\%/%w*%_r%."..picType, pos)
 
-                    if string.len(response) <= 50 then
-                        break
-                    else
-                        for _,picType in ipairs(picTypes) do
-                            local pos = 1
-                            while true do
-                                --TODO (优化匹配代码以及图片后缀)
-                                --查找此问题页面中的图片地址
-                                --https:\/\/pic4.zhimg.com\/5c2b9c18ca49a03995a62975393e0c87_200x112.png
+                            if s ~= nil then
+                                local pic_url = string.sub(response, s, e)
+                                local _a , _b = string.find(pic_url, "pic")
+                                local _c, _d = string.find(pic_url, "com")
 
-                                local s, e = string.find(response, "https:\\%/\\%/pic%d.zhimg.com\\%/%w*%_r%."..picType, pos)
+                                pic_url = "https://"..string.sub(pic_url, _a, _d)..string.sub(pic_url, _d+2, string.len(pic_url))
 
-                                if s ~= nil then
-                                    local pic_url = string.sub(response, s, e)
-                                    local _a , _b = string.find(pic_url, "pic")
-                                    local _c, _d = string.find(pic_url, "com")
-
-                                    pic_url = "https://"..string.sub(pic_url, _a, _d)..string.sub(pic_url, _d+2, string.len(pic_url))
-
-                                    if not requestdPic[pic_url] then
-                                        requestdPic[pic_url] = true
-                                        requestedPicNum = requestedPicNum + 1
-                                        singleCo(function ()
-                                                --访问图片
-                                                requestPic(clientService, pic_url, dirname, qoffset)
-                                            end)
+                                if not requestdPic[pic_url] then
+                                    requestdPic[pic_url] = true
+                                    requestedPicNum = requestedPicNum + 1
+                                    if ZhihuConfig.IsUseConcurrent then
+                                        ControlConcurrentRequestPic(clientService, pic_url, dirname, qoffset)    --(控制)同时开启N个请求
+                                    else
+                                        --单协程(同时只一个图片连接请求,顺序同步完成)
+                                        requestPic(clientService, pic_url, dirname, qoffset)
                                     end
-
-                                    pos = e
-                                else
-                                    break
                                 end
+
+                                pos = e
+                            else
+                                break
                             end
                         end
                     end
-                else
-                    break
                 end
-
-                offset = offset + 10
+            else
+                break
             end
+
+            offset = offset + 10
         end
     end
 end
@@ -186,10 +173,7 @@ function userMain()
                             local question_url = string.sub(response, s+1 , e-1)
 
                             print("request question_url :"..question_url)
-                            singleCo(function ()
-                                --访问问题页面
-                                requestQuestion(clientService, question_url, v.dirname, v.startOffset+10*(i-1))
-                            end)
+                            requestQuestion(clientService, question_url, v.dirname, v.startOffset+10*(i-1))
                         else
                             print("no more question, will break")
                             break
@@ -203,12 +187,13 @@ function userMain()
     end)
 
     coroutine_start(function ()
+        local allStartTime = CoreDD:getNowUnixTime()
         while true do
             coroutine_sleep(coroutine_running(), 1000)
-            print("Current Completed Pic Num : "..totalPicNum)
+            print("Current Completed Pic Num : "..totalPicNum.." cost ".. (CoreDD:getNowUnixTime()-allStartTime).." ms")
             print("Current requested pic num: "..requestedPicNum)
             if isAllCompleted then
-                print("all pic completed, you can close process")
+                print("all pic completed, you can close process, all cost "..(CoreDD:getNowUnixTime()-allStartTime).." ms")
                 break
             end
         end
