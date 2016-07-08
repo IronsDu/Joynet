@@ -17,6 +17,10 @@
 #include "NonCopyable.h"
 #include "md5calc.h"
 
+#ifdef USE_ZLIB
+#include "zlib.h"
+#endif
+
 class IdCreator : public NonCopyable
 {
 public:
@@ -261,8 +265,7 @@ public:
 
     void    loop()
     {
-        time_t nearMs = mTimerMgr->NearEndMs();
-        mLogicLoop.loop((nearMs == 0 && mTimerMgr->IsEmpty()) ? 100 : nearMs);
+        mLogicLoop.loop(mTimerMgr->IsEmpty() ? 100 : mTimerMgr->NearEndMs());
 
         processNetMsg();
         processAsyncConnectResult();
@@ -446,7 +449,7 @@ static std::string GetIPOfHost(const char* host)
     struct hostent *hptr = gethostbyname(host);
     if (hptr != NULL)
     {
-        if (hptr->h_addrtype == AF_INET || hptr->h_addrtype == AF_INET6)
+        if (hptr->h_addrtype == AF_INET)
         {
             char* lll = *(hptr->h_addr_list);
             char tmp[1024];
@@ -457,6 +460,50 @@ static std::string GetIPOfHost(const char* host)
 
     return ret;
 }
+
+#ifdef USE_ZLIB
+static std::string ZipUnCompress(const char* src, size_t len)
+{
+    static const size_t tmpLen = 64 * 1204 * 1024;
+    static char* tmp = new char[tmpLen];
+
+    int err = 0;
+    z_stream d_stream = { 0 }; /* decompression stream */
+    static char dummy_head[2] = {
+        0x8 + 0x7 * 0x10,
+        (((0x8 + 0x7 * 0x10) * 0x100 + 30) / 31 * 31) & 0xFF,
+    };
+    d_stream.zalloc = NULL;
+    d_stream.zfree = NULL;
+    d_stream.opaque = NULL;
+    d_stream.next_in = (Bytef*)src;
+    d_stream.avail_in = 0;
+    d_stream.next_out = (Bytef*)tmp;
+
+    if (inflateInit2(&d_stream, MAX_WBITS + 16) != Z_OK) return std::string();
+
+    size_t ndata = tmpLen;
+    while (d_stream.total_out < ndata && d_stream.total_in < len) {
+        d_stream.avail_in = d_stream.avail_out = 1; /* force small buffers */
+        if ((err = inflate(&d_stream, Z_NO_FLUSH)) == Z_STREAM_END) break;
+        if (err != Z_OK) {
+            if (err == Z_DATA_ERROR) {
+                d_stream.next_in = (Bytef*)dummy_head;
+                d_stream.avail_in = sizeof(dummy_head);
+                if ((err = inflate(&d_stream, Z_NO_FLUSH)) != Z_OK) {
+                    return std::string();
+                }
+            }
+            else return std::string();
+        }
+    }
+    if (inflateEnd(&d_stream) != Z_OK) return std::string();
+    ndata = d_stream.total_out;
+
+    return std::string(tmp, ndata);
+}
+
+#endif
 
 int main(int argc, char** argv)
 {
@@ -505,6 +552,9 @@ int main(int argc, char** argv)
     lua_tinker::def(L, "UtilsMd5", luaMd5);
     lua_tinker::def(L, "GetIPOfHost", GetIPOfHost);
     lua_tinker::def(L, "UtilsCreateDir", ox_dir_create);
+#ifdef USE_ZLIB
+    lua_tinker::def(L, "ZipUnCompress", ZipUnCompress);
+#endif
 
     CoreDD coreDD;
     lua_tinker::set(L, "CoreDD", &coreDD);

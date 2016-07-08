@@ -49,13 +49,13 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>..\3rdparty\accumulation-dev\src\net;..\3rdparty\accumulation-dev\src\timer;..\3rdparty\accumulation-dev\src\utils;..\3rdparty\lua_tinker;..\3rdparty\luasrc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\3rdparty\accumulation-dev\src\net;..\3rdparty\accumulation-dev\src\timer;..\3rdparty\accumulation-dev\src\utils;..\3rdparty\lua_tinker;..\3rdparty\luasrc;D:\dodo\openssl-1.0.1t-vs2013\include;..\3rdparty\zlib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;USE_OPENSSL;USE_ZLIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>..\3rdparty\luasrc\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>lua53.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\3rdparty\luasrc\;D:\dodo\openssl-1.0.1t-vs2013\lib;..\3rdparty\zlib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>lua53.lib;ws2_32.lib;libeay32MDd.lib;ssleay32MDd.lib;libz.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /y ..\3rdparty\luasrc\lua53.dll ..\</Command>
@@ -68,15 +68,15 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>..\3rdparty\accumulation-dev\src\net;..\3rdparty\accumulation-dev\src\timer;..\3rdparty\accumulation-dev\src\utils;..\3rdparty\lua_tinker;..\3rdparty\luasrc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\3rdparty\accumulation-dev\src\net;..\3rdparty\accumulation-dev\src\timer;..\3rdparty\accumulation-dev\src\utils;..\3rdparty\lua_tinker;..\3rdparty\luasrc;D:\dodo\openssl-1.0.1t-vs2013\include;..\3rdparty\zlib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NDEBUG;_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;USE_OPENSSL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalLibraryDirectories>..\3rdparty\luasrc\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>lua53.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\3rdparty\luasrc\;D:\dodo\openssl-1.0.1t-vs2013\lib;..\3rdparty\zlib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>lua53.lib;ws2_32.lib;libeay32MD.lib;ssleay32MD.lib;libz.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /y ..\3rdparty\luasrc\lua53.dll ..\</Command>
@@ -97,6 +97,7 @@
     <ClCompile Include="..\3rdparty\accumulation-dev\src\utils\connector.cpp" />
     <ClCompile Include="..\3rdparty\accumulation-dev\src\utils\fdset.c" />
     <ClCompile Include="..\3rdparty\accumulation-dev\src\utils\md5calc.cpp" />
+    <ClCompile Include="..\3rdparty\accumulation-dev\src\utils\ox_file.cpp" />
     <ClCompile Include="..\3rdparty\accumulation-dev\src\utils\systemlib.c" />
     <ClCompile Include="..\3rdparty\lua_tinker\lua_tinker.cpp" />
     <ClCompile Include="..\src\Joynet.cpp" />
@@ -116,6 +117,7 @@
     <ClInclude Include="..\3rdparty\accumulation-dev\src\utils\fdset.h" />
     <ClInclude Include="..\3rdparty\accumulation-dev\src\utils\md5calc.h" />
     <ClInclude Include="..\3rdparty\accumulation-dev\src\utils\msgqueue.h" />
+    <ClInclude Include="..\3rdparty\accumulation-dev\src\utils\ox_file.h" />
     <ClInclude Include="..\3rdparty\accumulation-dev\src\utils\systemlib.h" />
     <ClInclude Include="..\3rdparty\lua_tinker\lua_tinker.h" />
   </ItemGroup>

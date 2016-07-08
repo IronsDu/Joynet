@@ -102,6 +102,7 @@ local function request_http(service, ip, port, useSSL, _type, _url, _host, _args
         local packet = session:receiveUntil("\r\n", 10000)
         local content_len = 0
         local isChunked = false
+        local useZip = false
 
         --读取多行头部
         while true do
@@ -109,6 +110,10 @@ local function request_http(service, ip, port, useSSL, _type, _url, _host, _args
             if packet ~= nil then
                 if #packet == 0 then
                     break
+                end
+
+                if not useZip and string.find(packet, "Content%-Encoding: gzip") ~= nil then
+                    useZip = true
                 end
 
                 if content_len == 0 and not isChunked then
@@ -145,6 +150,7 @@ local function request_http(service, ip, port, useSSL, _type, _url, _host, _args
                 end
 
                 local tmp = session:receive(num, 100000)
+
                 if tmp ~= nil then
                     if response == nil then
                         response = tmp
@@ -158,6 +164,12 @@ local function request_http(service, ip, port, useSSL, _type, _url, _host, _args
                 
                 session:receiveUntil("\r\n", 100000)
             end
+        end
+
+        if response ~= nil and useZip then
+            print("before uncompress len: "..string.len(response))
+            response  = ZipUnCompress(response, string.len(response))
+            print("end uncompress len: "..string.len(response))
         end
 
         session:postClose()

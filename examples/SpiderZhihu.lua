@@ -27,7 +27,7 @@ local function requestPic(clientService, pic_url, dirname, qoffset)
         picAddres[host] = GetIPOfHost(host)
     end
 
-    local response = HttpClient.Request(clientService, picAddres[host], 443, true, "GET", url,  host) 
+    local response = HttpClient.Request(clientService, picAddres[host], 443, true, "GET", url,  host, nil, {["Accept-Encoding"]= "gzip"}) 
     if response ~= nil then
         local f = io.open(ZhihuConfig.saveDir.."\\"..dirname.."\\"..qoffset.."\\"..string.sub(url, 2, string.len(url)), "w+b")
         f:write(response)
@@ -100,7 +100,7 @@ local function requestQuestion(clientService, question_url, dirname, qoffset)
             local paramsUrlCode = urlEnCode("{\"url_token\":"..question_id..",\"pagesize\":10,\"offset\":"..offset.."}")
 
             local response = HttpClient.Request(clientService, zhihuAddres, 443, true, "POST", "/node/QuestionAnswerListV2", "www.zhihu.com", {method="next", params=paramsUrlCode},
-                {["Content-Type"]= "application/x-www-form-urlencoded; charset=UTF-8"})
+                {["Content-Type"]= "application/x-www-form-urlencoded; charset=UTF-8", ["Accept-Encoding"]= "gzip"})
             if response ~= nil then
                 if string.find(response, "Bad Request") ~= nil then
                     break
@@ -162,7 +162,8 @@ function userMain()
         -- 访问知乎搜索页面,搜索配置的关键字的相关问题
         for k,v in pairs(ZhihuConfig.querys) do
             for i=1,v.count do
-                local response = HttpClient.Request(clientService, zhihuAddres, 80, false, "GET", "/search", "www.zhihu.com", {type="content",q=urlEnCode(v.q), offset=v.startOffset+10*(i-1)})
+                local response = HttpClient.Request(clientService, zhihuAddres, 80, false, "GET", "/search", "www.zhihu.com", {type="content",q=urlEnCode(v.q), offset=v.startOffset+10*(i-1)},
+                    {["Accept-Encoding"]= "gzip"})
                 local pos = 1
                 if response ~= nil then
                     while true do
