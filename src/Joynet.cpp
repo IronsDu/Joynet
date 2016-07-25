@@ -16,6 +16,7 @@
 #include "lua_tinker.h"
 #include "NonCopyable.h"
 #include "md5calc.h"
+#include "SHA1.h"
 
 #ifdef USE_ZLIB
 #include "zlib.h"
@@ -434,6 +435,14 @@ private:
 
 };
 
+static std::string luaSha1(const char* str)
+{
+    CSHA1 sha1;
+    sha1.Update((unsigned char*)str, strlen(str));  /*TODO::str可能为二进制,没结束符  */
+    sha1.Final();
+    return std::string((char*)sha1.m_digest, 20);
+}
+
 static std::string luaMd5(const char* str)
 {
     char digest[1024];
@@ -523,6 +532,9 @@ int main(int argc, char** argv)
     L = luaL_newstate();
     luaopen_base(L);
     luaopen_utf8(L);
+    luaopen_bit32(L);
+    luaopen_string(L);
+    luaopen_table(L);
     luaL_openlibs(L);
     lua_tinker::init(L);
 
@@ -549,6 +561,7 @@ int main(int argc, char** argv)
     lua_tinker::class_def<CoreDD>(L, "addSessionToService", &CoreDD::addSessionToService);
     lua_tinker::class_def<CoreDD>(L, "asyncConnect", &CoreDD::asyncConnect);
 
+    lua_tinker::def(L, "UtilsSha1", luaSha1);
     lua_tinker::def(L, "UtilsMd5", luaMd5);
     lua_tinker::def(L, "GetIPOfHost", GetIPOfHost);
     lua_tinker::def(L, "UtilsCreateDir", ox_dir_create);
