@@ -351,7 +351,7 @@ local function _recv_field_packet(self)
     return _parse_field_packet(packet)
 end
 
-function MysqlSession:connect(tcpservice, ip, port, timeout, database, user, password)
+local function _connect(self, tcpservice, ip, port, timeout, database, user, password)
     local tcpsession = self.tcpsession
     if tcpsession then
         return nil, "already initialized"
@@ -456,7 +456,23 @@ function MysqlSession:connect(tcpservice, ip, port, timeout, database, user, pas
 
     self.state = STATE_CONNECTED
 	
-    return 1
+    return true
+end
+
+function MysqlSession:connect(tcpservice, ip, port, timeout, database, user, password)
+	local tcpsession = self.tcpsession
+    if tcpsession then
+        return nil, "already initialized"
+    end
+	
+	local isOK, err = _connect(self, tcpservice, ip, port, timeout, database, user, password)
+    self.tcpsession:releaseRecvLock()
+    if not isOK and self.tcpsession ~= nil then
+        self.tcpsession:postClose()
+        self.tcpsession = nil
+    end
+
+    return isOK, err
 end
 
 local function send_query(self, query)
@@ -570,8 +586,42 @@ local function read_result(self)
 end
 
 function MysqlSession:query(query)
+	local current = coroutine_running()
+    if self.queryControl ~= nil and self.queryControl ~= current then
+        --同时只允许一个协程进行query,存在进行中的query时，其他协程需要等待
+        table.insert(self.pendingQueryCo, current)
+
+        while true do   
+            coroutine_sleep(current, 1000)
+            if self.queryControl == current then
+                break
+            end
+        end
+    else
+        self.queryControl = current
+    end
+	
 	send_query(self, query)
-    return read_result(self)
+    local res, err =  read_result(self)
+	
+	self.tcpsession:releaseRecvLock()
+
+    if self.tcpsession:isClose() then
+        self.state = STATE_NONE
+        self.tcpsession = nil
+    end
+
+    if self.queryControl == coroutine_running() then
+        self.queryControl = nil
+        if next(self.pendingQueryCo) ~= nil then
+            --激活队列首部的协程
+            self.queryControl = self.pendingQueryCo[1]
+            table.remove(self.pendingQueryCo, 1)
+            coroutine_wakeup(self.queryControl)
+        end
+    end
+	
+	return res, err
 end
 
 local function MysqlSessionNew(p)

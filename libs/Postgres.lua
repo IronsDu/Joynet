@@ -112,7 +112,7 @@ function PGSession:connect(tcpservice, ip, port, timeout, database, user, passwo
         return true, nil
     end
 
-    local isOK, err = self:_connect(tcpservice, ip, port, timeout, database, user, password)
+    local isOK, err = _connect(self, tcpservice, ip, port, timeout, database, user, password)
     self.tcpsession:releaseRecvLock()
     if not isOK and self.tcpsession ~= nil then
         self.tcpsession:postClose()
@@ -122,7 +122,7 @@ function PGSession:connect(tcpservice, ip, port, timeout, database, user, passwo
     return isOK, err
 end
 
-function PGSession:_connect(tcpservice, ip, port, timeout, database, user, password)
+local function _connect(self, tcpservice, ip, port, timeout, database, user, password)
     self.tcpsession = tcpservice:connect(ip, port, timeout)
     if self.tcpsession == nil then
         return false, "connect failed"

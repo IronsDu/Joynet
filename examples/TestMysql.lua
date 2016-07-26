@@ -9,11 +9,11 @@ local totalQueryNum = 0
 function userMain()
     local mysqlService = TcpService:New()
     mysqlService:createService()
-
-    for i=1, 1 do
+	local mysql = MYSQL:New()
+	local isOK, err = mysql:connect(mysqlService, "192.168.2.200", 3306, 1000, "logindb", "trAdmin", "trmysql")
+    for i=1, 8 do
         coroutine_start(function ( ... )
-            local mysql = MYSQL:New()
-            local isOK, err = mysql:connect(mysqlService, "192.168.2.200", 3306, 1000, "logindb", "trAdmin", "trmysql")
+            
             if not isOK then
                 print("connect failed, err:"..err)
                 return
@@ -27,10 +27,11 @@ function userMain()
             end
 
             while true do
-                local res, err = mysql:query("select playerId,name,sex,level,exp,silver from playerinfo where playerId = '1'")
+                local res, err = mysql:query("select playerId,name,sex,level,exp,silver from playerinfo where playerId = '33ceb07bf4eeb3da587e268d663aba1a'")
                 if not res then
                     print("query failed, err :"..err)
                 else
+					print("query result")
                     totalQueryNum = totalQueryNum + 1
                     for i,v in ipairs(res) do
 						print(string.format("data : %s\t%s",v.playerId, v.name))

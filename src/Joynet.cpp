@@ -435,12 +435,12 @@ private:
 
 };
 
-static std::string luaSha1(const char* str)
+static std::string luaSha1(std::string str)
 {
     CSHA1 sha1;
-    sha1.Update((unsigned char*)str, strlen(str));  /*TODO::str可能为二进制,没结束符  */
+    sha1.Update((unsigned char*)str.c_str(), str.size());
     sha1.Final();
-    return std::string((char*)sha1.m_digest, 20);
+    return std::string((char*)sha1.m_digest, sizeof(sha1.m_digest));
 }
 
 static std::string luaMd5(const char* str)
