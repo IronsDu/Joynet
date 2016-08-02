@@ -17,6 +17,8 @@
 #include "NonCopyable.h"
 #include "md5calc.h"
 #include "SHA1.h"
+#include "base64.h"
+#include "http/WebSocketFormat.h"
 
 #ifdef USE_ZLIB
 #include "zlib.h"
@@ -451,6 +453,11 @@ static std::string luaMd5(const char* str)
     return std::string((const char*)digest, 32);
 }
 
+static std::string luaBase64(std::string str)
+{
+    return base64_encode((const unsigned char *)str.c_str(), str.size());
+}
+
 static std::string GetIPOfHost(const char* host)
 {
     std::string ret;
@@ -468,6 +475,11 @@ static std::string GetIPOfHost(const char* host)
     }
 
     return ret;
+}
+
+static std::string UtilsWsHandshakeResponse(std::string sec)
+{
+    return WebSocketFormat::wsHandshake(sec);
 }
 
 #ifdef USE_ZLIB
@@ -532,7 +544,6 @@ int main(int argc, char** argv)
     L = luaL_newstate();
     luaopen_base(L);
     luaopen_utf8(L);
-    luaopen_bit32(L);
     luaopen_string(L);
     luaopen_table(L);
     luaL_openlibs(L);
@@ -565,6 +576,7 @@ int main(int argc, char** argv)
     lua_tinker::def(L, "UtilsMd5", luaMd5);
     lua_tinker::def(L, "GetIPOfHost", GetIPOfHost);
     lua_tinker::def(L, "UtilsCreateDir", ox_dir_create);
+    lua_tinker::def(L, "UtilsWsHandshakeResponse", UtilsWsHandshakeResponse);
 #ifdef USE_ZLIB
     lua_tinker::def(L, "ZipUnCompress", ZipUnCompress);
 #endif

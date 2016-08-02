@@ -8,12 +8,6 @@ local strchar = string.char
 local format = string.format
 local strrep = string.rep
 local concat = table.concat
-local band = bit32.band
-local bxor = bit32.bxor
-local bor = bit32.bor
-local lshift = bit32.lshift
-local rshift = bit32.rshift
-local tohex = bit32.tohex
 
 local MysqlSession = {
 }
@@ -46,44 +40,37 @@ converters[0x0d] = tonumber  -- year
 converters[0xf6] = tonumber  -- newdecimal
 
 local function _get_byte2(data, i)
-    local a, b = strbyte(data, i, i + 1)
-    return bor(a, lshift(b, 8)), i + 2
+    return strunpack("<I2", data, i), i + 2
 end
 
 local function _get_byte3(data, i)
-    local a, b, c = strbyte(data, i, i + 2)
-    return bor(a, lshift(b, 8), lshift(c, 16)), i + 3
+    return strunpack("<I3", data, i), i + 3
 end
 
 local function _get_byte4(data, i)
-    local a, b, c, d = strbyte(data, i, i + 3)
-    return bor(a, lshift(b, 8), lshift(c, 16), lshift(d, 24)), i + 4
+    return strunpack("<I4", data, i), i + 4
 end
 
 local function _get_byte8(data, i)
-    local a, b, c, d, e, f, g, h = strbyte(data, i, i + 7)
-
-    -- XXX workaround for the lack of 64-bit support in bitop:
-    local lo = bor(a, lshift(b, 8), lshift(c, 16), lshift(d, 24))
-    local hi = bor(e, lshift(f, 8), lshift(g, 16), lshift(h, 24))
-    return lo + hi * 4294967296, i + 8
+    return strunpack("<I8", data, i), i + 8
 end
 
 local function _set_byte2(n)
-    return strchar(band(n, 0xff), band(rshift(n, 8), 0xff))
+    return strchar((n&0xff),
+					(n>>8)&0xff)
 end
 
 local function _set_byte3(n)
-    return strchar(band(n, 0xff),
-                   band(rshift(n, 8), 0xff),
-                   band(rshift(n, 16), 0xff))
+    return strchar(n&0xff,
+                   (n>>8)&0xff,
+                   (n>>16)&0xff)
 end
 
 local function _set_byte4(n)
-    return strchar(band(n, 0xff),
-                   band(rshift(n, 8), 0xff),
-                   band(rshift(n, 16), 0xff),
-                   band(rshift(n, 24), 0xff))
+    return strchar(n&0xff,
+                   (n>>8)&0xff,
+                   (n>>16)&0xff,
+				   (n>>24)&0xff)
 end
 
 local function _from_cstring(data, i)
@@ -102,25 +89,6 @@ local function _to_binary_coded_string(data)
     return strchar(#data) .. data
 end
 
-
-local function _dump(data)
-    local len = #data
-    local bytes = {}
-    for i = 1, len do
-        bytes[i] = format("%x", strbyte(data, i))
-    end
-    return concat(bytes, " ")
-end
-
-local function _dumphex(data)
-    local len = #data
-    local bytes = {}
-    for i = 1, len do
-        bytes[i] = tohex(strbyte(data, i), 2)
-    end
-    return concat(bytes, " ")
-end
-
 local function _compute_token(password, scramble)
     if password == "" then
         return ""
@@ -132,7 +100,7 @@ local function _compute_token(password, scramble)
     local n = #stage1
     local bytes = {}
     for i = 1, n do
-         bytes[i] = strchar(bxor(strbyte(stage3, i), strbyte(stage1, i)))
+         bytes[i] = strchar(strbyte(stage3, i)~strbyte(stage1, i))
     end
 
     return concat(bytes)
@@ -300,7 +268,6 @@ local function _parse_field_packet(data)
     length, pos = _get_byte4(data, pos)
 
     col.type = strbyte(data, pos)
-	print("col.type is"..col.type..", col.name is:".. col.name)
     return col
 end
 
@@ -406,7 +373,7 @@ local function _connect(self, tcpservice, ip, port, timeout, database, user, pas
     local more_capabilities
     more_capabilities, pos = _get_byte2(packet, pos)
 
-    capabilities = bor(capabilities, lshift(more_capabilities, 16))
+    capabilities = (capabilities|(more_capabilities<<16))
 
     local len = 21 - 8 - 1
 
@@ -521,7 +488,7 @@ local function read_result(self)
 
     if typ == 'OK' then
         local res = _parse_ok_packet(packet)
-        if res and band(res.server_status, SERVER_MORE_RESULTS_EXISTS) ~= 0 then
+        if res and (res.server_status&SERVER_MORE_RESULTS_EXISTS) ~= 0 then
             return res, "again"
         end
 
@@ -568,7 +535,7 @@ local function read_result(self)
         if typ == 'EOF' then
             local warning_count, status_flags = _parse_eof_packet(packet)
 
-            if band(status_flags, SERVER_MORE_RESULTS_EXISTS) ~= 0 then
+            if (status_flags&SERVER_MORE_RESULTS_EXISTS) ~= 0 then
                 return rows, "again"
             end
 
