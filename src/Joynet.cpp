@@ -181,6 +181,32 @@ public:
         return id;
     }
 
+    int64_t startLuaTimer(int delayMs, lua_tinker::luaValueRef callback)
+    {
+        int64_t id = mTimerIDCreator.claim();
+
+        Timer::WeakPtr timer = mTimerMgr->AddTimer(delayMs, [=](){
+            mTimerList.erase(id);
+            lua_State *__L = callback.L;
+            int __oldtop = lua_gettop(__L); 
+            lua_pushcclosure(__L, lua_tinker::on_error, 0);
+            int errfunc = lua_gettop(__L);
+            lua_rawgeti(__L, LUA_REGISTRYINDEX, callback.rindex);
+            if (lua_isfunction(__L, -1))
+            {
+                lua_pcall(__L, 0, 0, errfunc);
+            }
+            lua_remove(__L, errfunc);
+
+			lua_settop(__L,__oldtop);
+            lua_tinker::releaseLuaValueRef(callback);
+        });
+
+        mTimerList[id] = timer;
+
+        return id;
+    }
+
     void    removeTimer(int64_t id)
     {
         auto it = mTimerList.find(id);
@@ -437,7 +463,7 @@ private:
 
 };
 
-static std::string luaSha1(std::string str)
+static std::string luaSha1(const std::string& str)
 {
     CSHA1 sha1;
     sha1.Update((unsigned char*)str.c_str(), str.size());
@@ -453,16 +479,16 @@ static std::string luaMd5(const char* str)
     return std::string((const char*)digest, 32);
 }
 
-static std::string luaBase64(std::string str)
+static std::string luaBase64(const std::string& str)
 {
     return base64_encode((const unsigned char *)str.c_str(), str.size());
 }
 
-static std::string GetIPOfHost(const char* host)
+static std::string GetIPOfHost(const std::string& host)
 {
     std::string ret;
 
-    struct hostent *hptr = gethostbyname(host);
+    struct hostent *hptr = gethostbyname(host.c_str());
     if (hptr != NULL)
     {
         if (hptr->h_addrtype == AF_INET)
@@ -477,7 +503,7 @@ static std::string GetIPOfHost(const char* host)
     return ret;
 }
 
-static std::string UtilsWsHandshakeResponse(std::string sec)
+static std::string UtilsWsHandshakeResponse(const std::string& sec)
 {
     return WebSocketFormat::wsHandshake(sec);
 }
@@ -563,6 +589,7 @@ int main(int argc, char** argv)
 
 
     lua_tinker::class_def<CoreDD>(L, "startTimer", &CoreDD::startTimer);
+    lua_tinker::class_def<CoreDD>(L, "startLuaTimer", &CoreDD::startLuaTimer);
     lua_tinker::class_def<CoreDD>(L, "removeTimer", &CoreDD::removeTimer);
 
     lua_tinker::class_def<CoreDD>(L, "shutdownTcpSession", &CoreDD::shutdownTcpSession);
