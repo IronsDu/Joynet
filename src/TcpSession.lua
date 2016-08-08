@@ -107,10 +107,14 @@ function TcpSession:receive(len, timeout)
     end
 
     if len <= 0 then
-        return nil
+        return nil, "len <= 0"
     end
 
     self:recvLock()
+	
+	if self:isClose() then
+		return nil, "socket is closed"
+	end
 
     if string.len(self.cacheRecv) < len then
         self.recvCo = coroutine_running()
@@ -121,12 +125,15 @@ function TcpSession:receive(len, timeout)
     end
 
     local ret = nil
+	local err = nil
     if string.len(self.cacheRecv) >= len then
         ret = string.sub(self.cacheRecv, 1, len)
         self.cacheRecv = string.sub(self.cacheRecv, len+1, string.len(self.cacheRecv))
+	else
+		err = "timeout"
     end
 
-    return ret
+    return ret, err
 end
 
 function TcpSession:receiveUntil(str, timeout)
@@ -135,11 +142,15 @@ function TcpSession:receiveUntil(str, timeout)
     end
 
     if str == "" then
-        return nil
+        return nil, "str is empty"
     end
 
     self:recvLock()
-
+	
+	if self:isClose() then
+		return nil, "socket is closed"
+	end
+	
     local s, e = string.find(self.cacheRecv, str)
     if s == nil then
         self.recvCo = coroutine_running()
@@ -151,9 +162,13 @@ function TcpSession:receiveUntil(str, timeout)
     end
 
     local ret = nil
+	local err = nil
+	
     if s ~= nil then
         ret = string.sub(self.cacheRecv, 1, s-1)
         self.cacheRecv = string.sub(self.cacheRecv, e+1, string.len(self.cacheRecv))
+	else
+		err = "timeout"
     end
 
     return ret

@@ -21,7 +21,7 @@ function WebSocketSession:setMasking()
 	self.masking = true
 end
 
-function WebSocketSession:acceptHandshake()
+local function _acceptHandshake(self)
 	local session = self.session
 	if session ~= nil then
 		-- 开始读取(解析)http response
@@ -56,7 +56,23 @@ function WebSocketSession:acceptHandshake()
 	return false
 end
 
-function WebSocketSession:connectHandshake(url)
+local function _checkDisconnectAndReleaseRecvLock(self)
+	if self.tcpsession ~= nil then
+		self.tcpsession:releaseRecvLock()
+		if self.tcpsession:isClose() then
+			self.tcpsession = nil
+		end
+	end
+end
+
+function WebSocketSession:acceptHandshake()
+	local isAccept = _acceptHandshake(self)
+	_checkDisconnectAndReleaseRecvLock(self)
+	
+	return isAccept
+end
+
+local function _connectHandshake(self, url)
 	local session = self.session
 	local isAccept = false
 	
@@ -88,6 +104,13 @@ function WebSocketSession:connectHandshake(url)
             end
         end
 	end
+	
+	return isAccept
+end
+
+function WebSocketSession:connectHandshake(url)
+	local isAccept = _connectHandshake(self, url)
+	_checkDisconnectAndReleaseRecvLock(self)
 	
 	return isAccept
 end
@@ -143,7 +166,7 @@ local function build_frame(fin, opcode, payload_len, payload, masking)
     else
         masking_key = ""
     end
-
+	
     return char(fst, snd) .. extra_len_bytes .. masking_key .. payload
 end
 
@@ -174,8 +197,12 @@ function WebSocketSession:sendPong(content)
 	self.session:send(build_frame(true, 0xa, #content, content, self.masking))
 end
 
-function WebSocketSession:readFrame(force_masking)
+local function _readFrame(self, force_masking)
 	local session = self.session
+	if session == nil then
+		return nil, nil, "not connected"
+	end
+	
 	local data, err = session:receive(2, 10000)
 	
     if not data then
@@ -334,13 +361,20 @@ function WebSocketSession:readFrame(force_masking)
     return msg, types[opcode], not fin and "again" or nil
 end
 
+function WebSocketSession:readFrame(force_masking)
+	local msg, t, err = _readFrame(self, force_masking)
+	_checkDisconnectAndReleaseRecvLock(self)
+	
+	return msg, t, err
+end
+
 local function WebSocketSessionNew(p)
     local o = {}
     setmetatable(o, p)
     p.__index = p
 	
 	o.session = nil
-	o.masking = nil
+	o.masking = true
 	
     return o
 end
