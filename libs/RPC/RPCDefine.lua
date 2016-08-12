@@ -1,0 +1,9 @@
+local REQUEST = 1
+local RESPONSE = 2
+local POSTMSG = 3
+
+return {
+	REQUEST = REQUEST,
+	RESPONSE = RESPONSE,
+	POSTMSG = POSTMSG,
+}

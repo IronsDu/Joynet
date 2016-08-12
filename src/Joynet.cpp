@@ -188,6 +188,11 @@ public:
         Timer::WeakPtr timer = mTimerMgr->AddTimer(delayMs, [=](){
             mTimerList.erase(id);
             lua_State *__L = callback.L;
+            if (__L == nullptr)
+            {
+                __L = L;
+            }
+
             int __oldtop = lua_gettop(__L); 
             lua_pushcclosure(__L, lua_tinker::on_error, 0);
             int errfunc = lua_gettop(__L);
