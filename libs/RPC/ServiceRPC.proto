@@ -1,24 +1,24 @@
-syntax = "proto2";
+syntax = "proto3";
 
 package dodo;
 
 message RPCRequest 
 {
-	required string callerHarborIP = 1;		//调用者的harbor服务IP
-	required uint32 callerHarborPort = 2;
-	required int64 callerServiceID = 3;		//调用者自身的服务ID
-	required int64 callerReqID = 4;			//此调用在调用者服务里的序号ID
+    string callerHarborIP = 1;		//调用者的harbor服务IP
+    uint32 callerHarborPort = 2;
+    int64 callerServiceID = 3;		//调用者自身的服务ID
+    int64 callerReqID = 4;			//此调用在调用者服务里的序号ID
 	
-	optional string remoteServiceName = 5;	//被调用(节点内,局部)服务名
-	optional int64 remoteServiceID = 6;		//被调用的服务ID
+    string remoteServiceName = 5;	//被调用(节点内,局部)服务名
+    int64 remoteServiceID = 6;		//被调用的服务ID
 	
-	required bytes body = 7;				//参数
+    bytes body = 7;				//参数
 }
 
 message RPCResponse 
 {
-	required int64 callerReqID = 1;			//调用者的请求序号
-	required int64 callerServiceID = 2;		//调用者的服务ID
-    optional string error = 3;
-	required bytes body = 4;				//response返回值
+    int64 callerReqID = 1;			//调用者的请求序号
+    int64 callerServiceID = 2;		//调用者的服务ID
+    string error = 3;
+    bytes body = 4;				//response返回值
 }

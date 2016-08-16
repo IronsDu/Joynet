@@ -33,8 +33,7 @@ end
 
 function RpcRequest:reply(data)
     if self:isSync() then
-        --TODO::err用nil代替"",目前在table.unpack(nil, ...)会出现问题
-        RPCCall.RPCReply(self._remoteAddr, self._remotePort, self._callerServiceID, data, "", self._callerReqID)
+        RPCCall.RPCReply(self._remoteAddr, self._remotePort, self._callerServiceID, data, nil, self._callerReqID)
     end
 end
 

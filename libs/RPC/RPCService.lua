@@ -1,4 +1,4 @@
-local LinkQue = require "linkque"
+local Queue = require "queue"
 local protobuf = require "protobuf"
 local Lock = require "lock"
 local RpcRequest = require "RPCRequest"
@@ -11,16 +11,7 @@ local POSTMSG = RPCDefine.POSTMSG
 
 --RPC服务对象
 
-if true then
-    local addr = io.open("ServiceRPC.pb","rb")
-    if addr ~= nil then
-        local buffer = addr:read "*a"
-        addr:close()
-        protobuf.register(buffer)
-    else
-        print("failed open ServiceRPC.pb")
-    end
-end
+protobuf.register_file "ServiceRPC.pb"
 
 local nextServiceIncID = 0
 local serviceTableOfName = {}
@@ -38,11 +29,11 @@ function service:new()
     o.serviceID = (os.time() << 32) | nextServiceIncID
     o.name = nil
     --使用两种channel:request(包括postmsg类型) 和 response
-    --为了避免(使用一个channel时)在A协程调用rpcCall(等待response)时，另外的协程B调用recvRequest。而另外的服务发送了response到了B的问题。
-    o.requestChan = LinkQue.New()
-    o.requestBlock = LinkQue.New()
-    o.responseChan = LinkQue.New()
-    o.responseBlock = LinkQue.New()
+    --为了避免(使用一个queue时)在A协程调用rpcCall(等待response)时，另外的协程B调用recvRequest。而另外的服务发送了response到了B的问题。
+    o.requestChan = Queue.New()
+    o.requestBlock = Queue.New()
+    o.responseChan = Queue.New()
+    o.responseBlock = Queue.New()
     o.nextRequestID = 0
     o.rpcCallGuard = Lock.New()
     
@@ -87,6 +78,9 @@ local function serviceRecvRequest(self, timeout)
         self.requestBlock:Push(coObject)
         coroutine_sleep(coObject, timeout)
         msg = self.requestChan:Pop()
+        if msg == nil and self.requestBlock:Front() == coObject then
+            self.requestBlock:Pop()
+        end
     end
     
     if msg ~= nil then
@@ -107,6 +101,9 @@ local function serviceRecvResponse(self, timeout)
         self.responseBlock:Push(coObject)
         coroutine_sleep(coObject, timeout)
         msg = self.responseChan:Pop()
+        if msg == nil and self.responseBlock:Front() == coObject then
+            self.responseBlock:Pop()
+        end
     end
     
     if msg ~= nil then

@@ -35,10 +35,6 @@ local function _RPCCall(remoteIP, remotePort, remoteServiceID, remoteServiceName
                 destService:pushRequest(harborIP, harborPort, callerService:getID(), callerService.nextRequestID, _type, data)
                 local err, _replyReqID, _data =  callerService:recvResponse()
                 assert(_replyReqID == callerService.nextRequestID)
-                if err == "" then
-                    return nil, _data
-                end
-                
                 return err, _data
                 
             elseif _type == POSTMSG then
@@ -84,9 +80,6 @@ local function _RPCCall(remoteIP, remotePort, remoteServiceID, remoteServiceName
                 sendPB(session, _type, pbData)
                 local err, _replyReqID, _data =  callerService:recvResponse()
                 assert(callerService.nextRequestID == _replyReqID)
-                if err == "" then
-                    return nil, _data
-                end
                 return err, _data
             elseif _type == POSTMSG then
                 local request = {
@@ -112,7 +105,6 @@ local function _RPCCall(remoteIP, remotePort, remoteServiceID, remoteServiceName
 
                 local pbData = protobuf.encode("dodo.RPCResponse", response)
                 sendPB(session, RESPONSE, pbData)
-                
                 return nil, true
             end
         else

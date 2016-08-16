@@ -44,9 +44,13 @@ local function harborSessionRecvThread(session)
                     local response = protobuf.decode("dodo.RPCResponse" , pbData)
                     if response ~= nil then
                         local service = RPCServiceMgr.FindServiceByID(response.callerServiceID)
+                        local tmpErr = response.error
+                        if tmpErr == "" then
+                            tmpErr = nil
+                        end
                         
                         if service ~= nil and service.nextRequestID == response.callerReqID then
-                            service:pushResponse(response.error, response.callerReqID, response.body)
+                            service:pushResponse(tmpErr, response.callerReqID, response.body)
                         end
                     end
                 else
