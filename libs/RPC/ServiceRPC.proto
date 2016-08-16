@@ -19,5 +19,6 @@ message RPCResponse
 {
 	required int64 callerReqID = 1;			//调用者的请求序号
 	required int64 callerServiceID = 2;		//调用者的服务ID
-	required bytes body = 3;				//response返回值
+    optional string error = 3;
+	required bytes body = 4;				//response返回值
 }
