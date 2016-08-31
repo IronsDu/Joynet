@@ -28,12 +28,14 @@ function service:new()
     
     o.serviceID = (os.time() << 32) | nextServiceIncID
     o.name = nil
-    --使用两种channel:request(包括postmsg类型) 和 response
+    --使用两个Queue:request(包括postmsg类型) 和 response
     --为了避免(使用一个queue时)在A协程调用rpcCall(等待response)时，另外的协程B调用recvRequest。而另外的服务发送了response到了B的问题。
     o.requestChan = Queue.New()
     o.requestBlock = Queue.New()
+    
     o.responseChan = Queue.New()
     o.responseBlock = Queue.New()
+    
     o.nextRequestID = 0
     o.rpcCallGuard = Lock.New()
     
@@ -127,8 +129,16 @@ function service:recvResponse(timeout)
 end
 
 --同步RPC调用(需要传递调用者service参数,且对他加锁,避免多个协程同时使用一个RPCService对象调用其它服务可能造成response乱序问题)
-function service:SyncCall(remoteIP, remotePort, remoteServiceID, remoteServiceName, data)
+function service:SyncCall(remoteIP, remotePort, remoteService, data)
     self.rpcCallGuard:Lock()
+    local remoteServiceID = nil
+    local remoteServiceName = nil
+    if type(remoteService) == "string" then
+        remoteServiceName = remoteService
+    else
+        remoteServiceID = remoteService
+    end
+    
     local err, _response = RPCCall.RPCCall(remoteIP, remotePort, remoteServiceID, remoteServiceName, REQUEST, data, 0, self)
     self.rpcCallGuard:Unlock()
     return err, _response

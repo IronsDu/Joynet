@@ -14,18 +14,22 @@ end
 
 --添加断言
 function lock:Lock()
-	while self.flag do
-		local coObject = coroutine_running()
+    if self.flag then
+        local coObject = coroutine_running()
 		self.block:Push(coObject)
-		coroutine_sleep(coObject, 10000000)
-	end
+        
+        while self.flag do
+            coroutine_sleep(coObject, 10000000)
+        end
+    end
+    
 	self.flag = true
 end
 
 function lock:Unlock()
 	self.flag = false
 	local coObject = self.block:Pop()
-	if co then
+	if coObject then
 		coroutine_wakeup(coObject)
 	end
 end

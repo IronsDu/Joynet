@@ -11,9 +11,9 @@ function userMain()
     local clientService = TcpService:New()
     clientService:createService()
         
-    for i=1,1 do
+    for i=1,100 do
         coroutine_start(function ()
-            local session = clientService:connect("192.168.12.1", 9999, 5000)
+            local session = clientService:connect("127.0.0.1", 9999, 5000)
 
             if session ~= nil then
                 local str = "hello"

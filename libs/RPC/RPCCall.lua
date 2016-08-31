@@ -3,6 +3,7 @@ local TcpService = require "TcpService"
 local RPCServiceMgr = require "RPCServiceMgr"
 local RPCDefine = require "RPCDefine"
 local HarborAddress = require "harborAddress"
+local Lock = require "lock"
 
 local REQUEST = RPCDefine.REQUEST
 local RESPONSE = RPCDefine.RESPONSE
@@ -10,6 +11,7 @@ local POSTMSG = RPCDefine.POSTMSG
 
 local harborOutTcpService = nil
 local harborOutMgr = {}
+local harborOutMgrGuard = {}
 
 local function sendPB(session, op, message)
     local packet = string.pack(">I4", 8+#message) .. string.pack(">I4", op) .. message
@@ -56,11 +58,33 @@ local function _RPCCall(remoteIP, remotePort, remoteServiceID, remoteServiceName
         end
         local remoteAddr = remoteIP..remotePort
         local session = harborOutMgr[remoteAddr]
+        if session ~= nil and session:isClose() then
+            harborOutMgr[remoteAddr] = nil
+            session = nil
+        end
+        
         if session == nil then
-            session = harborOutTcpService:connect(remoteIP, remotePort, 5000)
-            print("connect success, remoteAddr is:"..remoteAddr)
-            harborOutMgr[remoteAddr] = session
-            --TODO::处理session断开时取消关联
+            local lock = harborOutMgrGuard[remoteAddr]
+            if lock == nil then
+                lock = Lock.New()
+                harborOutMgrGuard[remoteAddr] = lock
+            end
+            
+            lock:Lock()
+            
+            session = harborOutMgr[remoteAddr]
+            
+            if session == nil then
+                print("start connect")
+                session = harborOutTcpService:connect(remoteIP, remotePort, 5000)
+                print("connect success, remoteAddr is:"..remoteAddr)
+                if session ~= nil then
+                    harborOutMgr[remoteAddr] = session
+                    harborOutMgrGuard[remoteAddr] = nil
+                end
+            end
+            
+            lock:Unlock()
         end
         
         if session ~= nil then
@@ -79,7 +103,9 @@ local function _RPCCall(remoteIP, remotePort, remoteServiceID, remoteServiceName
                 local pbData = protobuf.encode("dodo.RPCRequest", request)
                 sendPB(session, _type, pbData)
                 local err, _replyReqID, _data =  callerService:recvResponse()
-                assert(callerService.nextRequestID == _replyReqID)
+                if err == nil then
+                    assert(callerService.nextRequestID == _replyReqID)
+                end
                 return err, _data
             elseif _type == POSTMSG then
                 local request = {
@@ -128,7 +154,14 @@ return {
     end,
     
     --非阻塞RPC调用(无返回值,所以也无需调用者service参数)
-    AsyncRPCCall = function (remoteIP, remotePort, remoteServiceID, remoteServiceName, data)
+    AsyncRPCCall = function (remoteIP, remotePort, remoteService, data)
+        local remoteServiceID = nil
+        local remoteServiceName = nil
+        if type(remoteService) == "string" then
+            remoteServiceName = remoteService
+        else
+            remoteServiceID = remoteService
+        end
         return _RPCCall(remoteIP, remotePort, remoteServiceID, remoteServiceName, POSTMSG, data)
     end,
 }

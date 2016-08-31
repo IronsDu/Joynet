@@ -2,6 +2,7 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <unordered_map>
 
 #include "systemlib.h"
 #include "SocketLibFunction.h"
@@ -118,12 +119,7 @@ public:
     {
         mTimerMgr = std::make_shared<TimerMgr>();
         mNextServiceID = 0;
-        mAsyncConnector = std::make_shared<ThreadConnector>([this](sock fd, int64_t uid){
-            AsyncConnectResult tmp = { fd, uid };
-            mAsyncConnectResultList.Push(tmp);
-            mAsyncConnectResultList.ForceSyncWrite();
-            mLogicLoop.wakeup();
-        });
+        mAsyncConnector = std::make_shared<ThreadConnector>();
 
         createAsyncConnectorThread();
     }
@@ -153,7 +149,12 @@ public:
 
     void    createAsyncConnectorThread()
     {
-        mAsyncConnector->startThread();
+        mAsyncConnector->startThread([this](sock fd, int64_t uid){
+            AsyncConnectResult tmp = { fd, uid };
+            mAsyncConnectResultList.Push(tmp);
+            mAsyncConnectResultList.ForceSyncWrite();
+            mLogicLoop.wakeup();
+        });
     }
 
     void    startMonitor()

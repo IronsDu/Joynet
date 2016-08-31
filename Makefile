@@ -8,6 +8,9 @@ source = src/Joynet.cpp\
 		3rdparty/accumulation-dev/src/utils/connector.cpp\
 		3rdparty/accumulation-dev/src/utils/fdset.c\
 		3rdparty/accumulation-dev/src/utils/array.c\
+		3rdparty/accumulation-dev/src/utils/SHA1.cpp\
+		3rdparty/accumulation-dev/src/utils/base64.cpp\
+		3rdparty/accumulation-dev/src/utils/ox_file.cpp\
 		3rdparty/accumulation-dev/src/utils/systemlib.c\
 		3rdparty/accumulation-dev/src/utils/md5calc.cpp\
 		3rdparty/accumulation-dev/src/timer/timer.cpp\

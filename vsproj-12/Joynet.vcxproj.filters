@@ -69,6 +69,12 @@
     <ClCompile Include="..\3rdparty\accumulation-dev\src\utils\ox_file.cpp">
       <Filter>utils</Filter>
     </ClCompile>
+    <ClCompile Include="..\3rdparty\accumulation-dev\src\utils\SHA1.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\accumulation-dev\src\utils\base64.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\3rdparty\accumulation-dev\src\net\TCPService.h">
@@ -120,6 +126,12 @@
       <Filter>utils</Filter>
     </ClInclude>
     <ClInclude Include="..\3rdparty\accumulation-dev\src\utils\ox_file.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\3rdparty\accumulation-dev\src\utils\SHA1.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\3rdparty\accumulation-dev\src\utils\base64.h">
       <Filter>utils</Filter>
     </ClInclude>
   </ItemGroup>
