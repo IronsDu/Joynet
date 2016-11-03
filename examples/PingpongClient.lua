@@ -1,5 +1,5 @@
 package.path = "./src/?.lua;./libs/?.lua;"
-
+require("Joynet")
 local TcpService = require "TcpService"
 local AcyncConnect = require "Connect"
 
@@ -14,12 +14,14 @@ function userMain()
     for i=1,100 do
         coroutine_start(function ()
             local session = clientService:connect("127.0.0.1", 9999, 5000)
-
             if session ~= nil then
                 local str = "hello"
                 local strLen = string.len(str)
-
-                session:send(str)
+                
+                for j = 0, 10 do
+                    session:send(str)
+                end
+                
                 while true do
                 local packet = session:receive(strLen)
                     if packet ~= nil then

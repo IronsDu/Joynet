@@ -1,5 +1,5 @@
 package.path = "./src/?.lua;./libs/?.lua;./libs/RPC/?.lua;"
-
+require("Joynet")
 local Service = require "RPCService"
 local RPCCall = require "RPCCall"
 local harbor = require "harbor"

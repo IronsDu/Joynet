@@ -1,5 +1,5 @@
 package.path = "./src/?.lua;./libs/?.lua;"
-
+require("Joynet")
 local TcpService = require "TcpService"
 
 local totalRecvNum = 0

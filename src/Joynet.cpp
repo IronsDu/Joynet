@@ -25,6 +25,8 @@
 #include "zlib.h"
 #endif
 
+static lua_State* L = nullptr;
+
 class IdCreator : public NonCopyable
 {
 public:
@@ -76,8 +78,6 @@ struct NetMsg
     int64_t     mID;
     std::string mData;
 };
-
-struct lua_State* L = nullptr;
 
 struct LuaTcpSession
 {
@@ -561,71 +561,62 @@ static std::string ZipUnCompress(const char* src, size_t len)
 
 #endif
 
-int main(int argc, char** argv)
+extern "C"
 {
-    if (argc != 2)
+
+#ifndef _MSC_VER
+#else
+__declspec(dllexport)
+#endif
+
+    int luaopen_Joynet(lua_State *L)
     {
-        std::cout << "Usage : luafile" << std::endl;
-        exit(-1);
+        ::L = L;
+        ox_socket_init();
+    #ifdef USE_OPENSSL
+        SSL_library_init();
+        OpenSSL_add_all_algorithms();
+        SSL_load_error_strings();
+    #endif
+
+        lua_tinker::init(L);
+
+        /*lua_sethook(L, luaRuntimeCheck, LUA_MASKLINE, 0);*/
+
+        lua_tinker::class_add<CoreDD>(L, "JoynetCore");
+        lua_tinker::class_con<CoreDD>(L, lua_tinker::constructor<CoreDD>);
+
+        lua_tinker::class_def<CoreDD>(L, "startMonitor", &CoreDD::startMonitor);
+        lua_tinker::class_def<CoreDD>(L, "getNowUnixTime", &CoreDD::getNowUnixTime);
+
+        lua_tinker::class_def<CoreDD>(L, "loop", &CoreDD::loop);
+
+        lua_tinker::class_def<CoreDD>(L, "createTCPService", &CoreDD::createTCPService);
+        lua_tinker::class_def<CoreDD>(L, "listen", &CoreDD::listen);
+
+
+        lua_tinker::class_def<CoreDD>(L, "startTimer", &CoreDD::startTimer);
+        lua_tinker::class_def<CoreDD>(L, "startLuaTimer", &CoreDD::startLuaTimer);
+        lua_tinker::class_def<CoreDD>(L, "removeTimer", &CoreDD::removeTimer);
+
+        lua_tinker::class_def<CoreDD>(L, "shutdownTcpSession", &CoreDD::shutdownTcpSession);
+        lua_tinker::class_def<CoreDD>(L, "closeTcpSession", &CoreDD::closeTcpSession);
+        lua_tinker::class_def<CoreDD>(L, "sendToTcpSession", &CoreDD::sendToTcpSession);
+
+        lua_tinker::class_def<CoreDD>(L, "addSessionToService", &CoreDD::addSessionToService);
+        lua_tinker::class_def<CoreDD>(L, "asyncConnect", &CoreDD::asyncConnect);
+
+        lua_tinker::def(L, "UtilsSha1", luaSha1);
+        lua_tinker::def(L, "UtilsMd5", luaMd5);
+        lua_tinker::def(L, "GetIPOfHost", GetIPOfHost);
+        lua_tinker::def(L, "UtilsCreateDir", ox_dir_create);
+        lua_tinker::def(L, "UtilsWsHandshakeResponse", UtilsWsHandshakeResponse);
+    #ifdef USE_ZLIB
+        lua_tinker::def(L, "ZipUnCompress", ZipUnCompress);
+    #endif
+
+        lua_tinker::set(L, "CoreDD", new CoreDD());
+
+        return 1;
     }
-
-    ox_socket_init();
-#ifdef USE_OPENSSL
-    SSL_library_init();
-    OpenSSL_add_all_algorithms();
-    SSL_load_error_strings();
-#endif
-
-    L = luaL_newstate();
-    luaopen_base(L);
-    luaopen_utf8(L);
-    luaopen_string(L);
-    luaopen_table(L);
-    luaL_openlibs(L);
-    lua_tinker::init(L);
-
-    /*lua_sethook(L, luaRuntimeCheck, LUA_MASKLINE, 0);*/
-
-    lua_tinker::class_add<CoreDD>(L, "CoreDD");
-
-    lua_tinker::class_def<CoreDD>(L, "startMonitor", &CoreDD::startMonitor);
-    lua_tinker::class_def<CoreDD>(L, "getNowUnixTime", &CoreDD::getNowUnixTime);
-
-    lua_tinker::class_def<CoreDD>(L, "loop", &CoreDD::loop);
-
-    lua_tinker::class_def<CoreDD>(L, "createTCPService", &CoreDD::createTCPService);
-    lua_tinker::class_def<CoreDD>(L, "listen", &CoreDD::listen);
-
-
-    lua_tinker::class_def<CoreDD>(L, "startTimer", &CoreDD::startTimer);
-    lua_tinker::class_def<CoreDD>(L, "startLuaTimer", &CoreDD::startLuaTimer);
-    lua_tinker::class_def<CoreDD>(L, "removeTimer", &CoreDD::removeTimer);
-
-    lua_tinker::class_def<CoreDD>(L, "shutdownTcpSession", &CoreDD::shutdownTcpSession);
-    lua_tinker::class_def<CoreDD>(L, "closeTcpSession", &CoreDD::closeTcpSession);
-    lua_tinker::class_def<CoreDD>(L, "sendToTcpSession", &CoreDD::sendToTcpSession);
-
-    lua_tinker::class_def<CoreDD>(L, "addSessionToService", &CoreDD::addSessionToService);
-    lua_tinker::class_def<CoreDD>(L, "asyncConnect", &CoreDD::asyncConnect);
-
-    lua_tinker::def(L, "UtilsSha1", luaSha1);
-    lua_tinker::def(L, "UtilsMd5", luaMd5);
-    lua_tinker::def(L, "GetIPOfHost", GetIPOfHost);
-    lua_tinker::def(L, "UtilsCreateDir", ox_dir_create);
-    lua_tinker::def(L, "UtilsWsHandshakeResponse", UtilsWsHandshakeResponse);
-#ifdef USE_ZLIB
-    lua_tinker::def(L, "ZipUnCompress", ZipUnCompress);
-#endif
-
-    CoreDD coreDD;
-    lua_tinker::set(L, "CoreDD", &coreDD);
-
-    lua_tinker::dofile(L, argv[1]);
-
-    lua_close(L);
-    L = nullptr;
-
-    coreDD.destroy();
-
-    return 0;
 }

@@ -1,5 +1,5 @@
 package.path = "./src/?.lua;./libs/?.lua;"
-
+require("Joynet")
 local TcpService = require "TcpService"
 local AcyncConnect = require "Connect"
 local WebSocket = require "WebSocket"

@@ -1,5 +1,5 @@
 package.path = "./?.lua;./src/?.lua;./libs/?.lua;"
-
+require("Joynet")
 local ZhihuConfig = require "examples.ZhihuConfig"
 local TcpService = require "TcpService"
 local HttpClient = require "HttpClient"

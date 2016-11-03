@@ -1,7 +1,7 @@
 # Joynet
 ## 介绍
 
-high performance  network library for lua, based on https://github.com/IronsDu/accumulation-dev and lua coroutine.
+high performance  network library for lua, based on https://github.com/IronsDu/accumulation-dev and `lua coroutine`.
 Joynet 的网络底层使用多线程，但Lua (层面)是运行在单线程上。借助协程提供同步形式的API。
 
 [src](https://github.com/IronsDu/Joynet/tree/master/src) 目录是此项目源代码
@@ -11,16 +11,22 @@ Joynet 的网络底层使用多线程，但Lua (层面)是运行在单线程上�
 ## 构建
 使用 `git clone`迁出项目并进入项目根目录，并依次使用 `git submodule init`和`git submodule update` 下载依赖项.
 
-* Windows : 在项目根目录中打开 Joynet.sln, 编译即可在当前目录产生可执行文件 Joynet
-* Linux : 在项目根本执行 `make` 即可生成可执行文件 Joynet
+* Windows : 在项目根目录中打开 `Joynet.sln`, 编译后会在当前目录生成 `Joynet.dll`
+* Linux : 在项目根目录执行 `make` 生成 `Joynet.so`
 
 ## 使用
-examples 包含测试代码。
-譬如我们要在`Windows`下运行PingPong测试：
-先在项目根目录执行  `Joynet examples\PingpongServer.lua`，然后执行 `Joynet examples\PingpongClient.lua`
+[`examples`](https://github.com/IronsDu/Joynet/tree/master/examples) 目录包含测试代码。
+譬如我们要在Windows下运行PingPong测试：
 
-当前Joynet是作为一个宿主程序，由其运行业务Lua文件。
-不过我们能轻松的把它作为动态库集成到已有的应用系统里。
+先在项目根目录执行  `lua examples\PingpongServer.lua`，然后执行 `lua examples\PingpongClient.lua` 即可
+
+使用此库也很简单,在你的Lua代码里使用`require("Joynet")`加载网络库,然后使用`CoreDD`对象的相关接口即可(具体参考[`examples`](https://github.com/IronsDu/Joynet/tree/master/examples)目录的各示例代码)
+
+当然，你必须先安装有Lua环境
+
+Windows下可以[下载](http://luabinaries.sourceforge.net/)二进制包,仅Windows下的Joynet需要链接3rdparty/lualib目录,当前版本是lua5.3,如果你使用的Lua虚拟机是lua5.1,那么你需要用Lua5.1的include和lib/dll替换luasrc目录的内容,然后再构建Joynet
+
+linux下可以[下载](http://www.lua.org/ftp/)Lua源码(然后使用make linus;make install安装即可)
 
 ## 关于协程
 协程是轻量级线程，所以多线程有的问题它也有，只是影响程度不同。
