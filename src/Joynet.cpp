@@ -43,7 +43,7 @@ public:
     }
 
 private:
-    int     mIncID;
+    int32_t     mIncID;
 };
 
 struct AsyncConnectResult
@@ -52,7 +52,7 @@ struct AsyncConnectResult
     int64_t uid;
 };
 
-enum NetMsgType
+enum class NetMsgType
 {
     NMT_ENTER,      /*链接进入*/
     NMT_CLOSE,      /*链接断开*/
@@ -62,7 +62,7 @@ enum NetMsgType
 
 struct NetMsg
 {
-    NetMsg(int serviceID, NetMsgType t, int64_t id) : mServiceID(serviceID), mType(t), mID(id)
+    NetMsg(int serviceID, NetMsgType type, int64_t id) : mServiceID(serviceID), mType(type), mID(id)
     {
     }
 
@@ -83,8 +83,8 @@ struct LuaTcpSession
 {
     typedef std::shared_ptr<LuaTcpSession> PTR;
 
-    int64_t mID;
-    std::string recvData;
+    int64_t         mID;
+    std::string     mRecvData;
 };
 
 struct LuaTcpService
@@ -150,8 +150,7 @@ public:
     void    createAsyncConnectorThread()
     {
         mAsyncConnector->startThread([this](sock fd, int64_t uid){
-            AsyncConnectResult tmp = { fd, uid };
-            mAsyncConnectResultList.Push(tmp);
+            mAsyncConnectResultList.Push(AsyncConnectResult{ fd, uid });
             mAsyncConnectResultList.ForceSyncWrite();
             mLogicLoop.wakeup();
         });
@@ -167,14 +166,13 @@ public:
         return ox_getnowtime();
     }
 
-    int64_t startTimer(int delayMs, const char* callback)
+    int64_t startTimer(int delayMs, const std::string& callback)
     {
-        int64_t id = mTimerIDCreator.claim();
+        auto id = mTimerIDCreator.claim();
 
-        std::string cb = callback;
-        Timer::WeakPtr timer = mTimerMgr->AddTimer(delayMs, [=](){
+        auto timer = mTimerMgr->AddTimer(delayMs, [=](){
             mTimerList.erase(id);
-            lua_tinker::call<void>(L, cb.c_str(), id);
+            lua_tinker::call<void>(L, callback.c_str(), id);
         });
 
         mTimerList[id] = timer;
@@ -184,10 +182,12 @@ public:
 
     int64_t startLuaTimer(int delayMs, lua_tinker::luaValueRef callback)
     {
-        int64_t id = mTimerIDCreator.claim();
+        auto id = mTimerIDCreator.claim();
 
-        Timer::WeakPtr timer = mTimerMgr->AddTimer(delayMs, [=](){
+        auto timer = mTimerMgr->AddTimer(delayMs, [=](){
+
             mTimerList.erase(id);
+
             lua_State *__L = callback.L;
             if (__L == nullptr)
             {
@@ -204,7 +204,7 @@ public:
             }
             lua_remove(__L, errfunc);
 
-			lua_settop(__L,__oldtop);
+            lua_settop(__L,__oldtop);
             lua_tinker::releaseLuaValueRef(callback);
         });
 
@@ -228,7 +228,7 @@ public:
         auto it = mServiceList.find(serviceID);
         if (it != mServiceList.end())
         {
-            auto service = (*it).second;
+            auto& service = (*it).second;
             auto sessionIT = service->mSessions.find(socketID);
             if (sessionIT != service->mSessions.end())
             {
@@ -243,7 +243,7 @@ public:
         auto it = mServiceList.find(serviceID);
         if (it != mServiceList.end())
         {
-            auto service = (*it).second;
+            auto& service = (*it).second;
             auto sessionIT = service->mSessions.find(socketID);
             if (sessionIT != service->mSessions.end())
             {
@@ -257,7 +257,7 @@ public:
         auto it = mServiceList.find(serviceID);
         if (it != mServiceList.end())
         {
-            auto service = (*it).second;
+            auto& service = (*it).second;
             auto sessionIT = service->mSessions.find(socketID);
             if (sessionIT != service->mSessions.end())
             {
@@ -268,23 +268,18 @@ public:
 
     bool    addSessionToService(int serviceID, sock fd, int64_t uid, bool useSSL)
     {
-        bool ret = false;
+        auto ret = false;
 
         auto it = mServiceList.find(serviceID);
         if (it != mServiceList.end())
         {
             ox_socket_nodelay(fd);
-            LuaTcpService::PTR t = (*it).second;
-            auto service = (*it).second->mTcpService;
+            auto serviceID = (*it).second->mServiceID;
+            auto& service = (*it).second->mTcpService;
             ret = service->addDataSocket(fd, [=](int64_t id, std::string ip){
-                NetMsg* msg = new NetMsg(t->mServiceID, NMT_CONNECTED, id);
-                std::string uidStr = std::to_string(uid);
-                msg->setData(uidStr.c_str(), uidStr.size());
-                lockMsgList();
-                mNetMsgList.Push(msg);
-                unlockMsgList();
+                auto uidStr = std::to_string(uid);
+                pushMsg(serviceID, NetMsgType::NMT_CONNECTED, id, uidStr.c_str(), uidStr.size());
 
-                mLogicLoop.wakeup();
             }, service->getDisconnectCallback(), service->getDataCallback(), useSSL, 1024 * 1024, false);
         }
 
@@ -293,7 +288,7 @@ public:
 
     int64_t asyncConnect(const char* ip, int port, int timeout)
     {
-        int64_t id = mAsyncConnectIDCreator.claim();
+        auto id = mAsyncConnectIDCreator.claim();
         mAsyncConnector->asyncConnect(ip, port, timeout, id);
         return id;
     }
@@ -311,7 +306,8 @@ public:
     int     createTCPService()
     {
         mNextServiceID++;
-        LuaTcpService::PTR luaTcpService = std::make_shared<LuaTcpService>();
+
+        auto luaTcpService = std::make_shared<LuaTcpService>();
         luaTcpService->mServiceID = mNextServiceID;
         mServiceList[luaTcpService->mServiceID] = luaTcpService;
 
@@ -328,30 +324,15 @@ public:
         });
 
         luaTcpService->mTcpService->setEnterCallback([=](int64_t id, std::string ip){
-            NetMsg* msg = new NetMsg(luaTcpService->mServiceID, NMT_ENTER, id);
-            lockMsgList();
-            mNetMsgList.Push(msg);
-            unlockMsgList();
-
-            mLogicLoop.wakeup();
+            pushMsg(luaTcpService->mServiceID, NetMsgType::NMT_ENTER, id);
         });
 
         luaTcpService->mTcpService->setDisconnectCallback([=](int64_t id){
-            NetMsg* msg = new NetMsg(luaTcpService->mServiceID, NMT_CLOSE, id);
-            lockMsgList();
-            mNetMsgList.Push(msg);
-            unlockMsgList();
-
-            mLogicLoop.wakeup();
+            pushMsg(luaTcpService->mServiceID, NetMsgType::NMT_CLOSE, id);
         });
 
         luaTcpService->mTcpService->setDataCallback([=](int64_t id, const char* buffer, size_t len){
-            NetMsg* msg = new NetMsg(luaTcpService->mServiceID, NMT_RECV_DATA, id);
-            msg->setData(buffer, len);
-            lockMsgList();
-            mNetMsgList.Push(msg);
-            unlockMsgList();
-
+            pushMsg(luaTcpService->mServiceID, NetMsgType::NMT_RECV_DATA, id, buffer, len);
             return len;
         });
 
@@ -363,12 +344,27 @@ public:
         auto it = mServiceList.find(serviceID);
         if (it != mServiceList.end())
         {
-            auto service = (*it).second;
+            auto& service = (*it).second;
             service->mTcpService->startListen(false, ip, port, 1024 * 1024, nullptr, nullptr);
         }
     }
 
 private:
+    void    pushMsg(int serviceID, NetMsgType type, int64_t id, const char* data = nullptr, size_t dataLen = 0)
+    {
+        auto msg = std::make_shared<NetMsg>(serviceID, type, id);
+        if (data != nullptr)
+        {
+            msg->setData(data, dataLen);
+        }
+
+        lockMsgList();
+        mNetMsgList.Push(std::move(msg));
+        unlockMsgList();
+
+        mLogicLoop.wakeup();
+    }
+
     void    lockMsgList()
     {
         mNetMsgMutex.lock();
@@ -382,22 +378,23 @@ private:
     void    processNetMsg()
     {
         mNetMsgList.SyncRead(0);
-        NetMsg* msg = nullptr;
+
+        std::shared_ptr<NetMsg> msg = nullptr;
         while (mNetMsgList.PopFront(&msg))
         {
-            if (msg->mType == NMT_ENTER)
+            if (msg->mType == NetMsgType::NMT_ENTER)
             {
-                LuaTcpSession::PTR luaSocket = std::make_shared<LuaTcpSession>();
+                auto luaSocket = std::make_shared<LuaTcpSession>();
                 mServiceList[msg->mServiceID]->mSessions[msg->mID] = luaSocket;
 
                 lua_tinker::call<void>(L, "__on_enter__", msg->mServiceID, msg->mID);
             }
-            else if (msg->mType == NMT_CLOSE)
+            else if (msg->mType == NetMsgType::NMT_CLOSE)
             {
                 mServiceList[msg->mServiceID]->mSessions.erase(msg->mID);
                 lua_tinker::call<void>(L, "__on_close__", msg->mServiceID, msg->mID);
             }
-            else if (msg->mType == NMT_RECV_DATA)
+            else if (msg->mType == NetMsgType::NMT_RECV_DATA)
             {
                 bool isFind = false;
 
@@ -409,11 +406,19 @@ private:
                     {
                         isFind = true;
 
-                        auto client = (*it).second;
-                        client->recvData += msg->mData;
+                        auto& client = (*it).second;
+                        client->mRecvData += msg->mData;
 
-                        int consumeLen = lua_tinker::call<int>(L, "__on_data__", msg->mServiceID, msg->mID, client->recvData, client->recvData.size());
-                        client->recvData.erase(0, consumeLen);
+                        int consumeLen = lua_tinker::call<int>(L, "__on_data__", msg->mServiceID, msg->mID, client->mRecvData, client->mRecvData.size());
+                        assert(consumeLen >= 0);
+                        if (consumeLen == client->mRecvData.size())
+                        {
+                            client->mRecvData.clear();
+                        }
+                        else
+                        {
+                            client->mRecvData.erase(0, consumeLen);
+                        }
                     }
                 }
 
@@ -423,9 +428,9 @@ private:
                     std::cout << "not found session id" << msg->mID << std::endl;
                 }
             }
-            else if (msg->mType == NMT_CONNECTED)
+            else if (msg->mType == NetMsgType::NMT_CONNECTED)
             {
-                LuaTcpSession::PTR luaSocket = std::make_shared<LuaTcpSession>();
+                auto luaSocket = std::make_shared<LuaTcpSession>();
                 mServiceList[msg->mServiceID]->mSessions[msg->mID] = luaSocket;
                 int64_t uid = strtoll(msg->mData.c_str(), NULL, 10);
                 lua_tinker::call<void>(L, "__on_connected__", msg->mServiceID, msg->mID, uid);
@@ -434,25 +439,23 @@ private:
             {
                 assert(false);
             }
-
-            delete msg;
-            msg = nullptr;
         }
     }
 
     void    processAsyncConnectResult()
     {
         mAsyncConnectResultList.SyncRead(0);
+
         AsyncConnectResult result;
         while (mAsyncConnectResultList.PopFront(&result))
         {
             lua_tinker::call<void>(L, "__on_async_connectd__", (int)result.fd, result.uid);
         }
     }
-private:
 
+private:
     std::mutex                                  mNetMsgMutex;
-    MsgQueue<NetMsg*>                           mNetMsgList;
+    MsgQueue<std::shared_ptr<NetMsg>>           mNetMsgList;
 
     EventLoop                                   mLogicLoop;
 
