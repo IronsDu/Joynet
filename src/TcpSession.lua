@@ -12,7 +12,6 @@ local function TcpSessionNew(p)
     o.socketID = -1
     o.isClosed = false
     o.recvCo = nil
-    o.server = nil
     o.pendingWaitCo = {}
     o.cacheRecv = ""
     o.controlRecvCo = nil
@@ -26,14 +25,6 @@ end
 function TcpSession:init(serviceID, socketID)
     self.serviceID = serviceID
     self.socketID = socketID
-end
-
-function TcpSession:setServer(server)
-    self.server = server
-end
-
-function TcpSession:getServer()
-    return self.server
 end
 
 function TcpSession:setClose()

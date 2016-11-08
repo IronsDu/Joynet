@@ -62,8 +62,6 @@ end
 
 -- 访问http,返回response
 local function request_http(service, ip, port, useSSL, _type, _url, _host, _args, _headvalues)
-    local startTime = CoreDD:getNowUnixTime()
-
     local response = nil
     local session = service:connect(ip, port, 10000, useSSL)
 

@@ -55,20 +55,18 @@ function TcpService:createService()
     self.serviceID = serviceID
     __TcpServiceList[serviceID] = self
 
-    local server = self
-
     self.closecallback = function (serviceID, socketID)
-        local session = server.sessions[socketID]
+        local session = self.sessions[socketID]
         if session ~= nil then
             session:setClose(true)
             session:wakeupRecv()
         end
 
-        server.sessions[socketID] = nil
+        self.sessions[socketID] = nil
     end
 
     self.datacallback = function (serviceID, socketID, data, len)
-        local session = server.sessions[socketID]
+        local session = self.sessions[socketID]
         return session:parseData(data, len)
     end
 
@@ -77,10 +75,9 @@ function TcpService:createService()
         if waitCo ~= nil then
             local session = TcpSession:New()
             session:init(serviceID, socketID)
-            session:setServer(server)
 
-            server.connectedSessions[uid] = session
-            server.sessions[socketID] = session
+            self.connectedSessions[uid] = session
+            self.sessions[socketID] = session
             self.connectedCo[uid] = nil
             coroutine_wakeup(waitCo)
         else
@@ -93,16 +90,14 @@ function TcpService:listen(ip, port)
     self:createService()
     if self.entercallback  == nil then
         CoreDD:listen(self.serviceID, ip, port)    --开启监听服务
-        local server = self
 
         self.entercallback = function (serviceID, socketID)
             local session = TcpSession:New()
             session:init(serviceID, socketID)
-            session:setServer(server)
 
-            table.insert(server.acceptSessions, session)
-            server.sessions[socketID] = session
-            server:wakeupAccept()
+            table.insert(self.acceptSessions, session)
+            self.sessions[socketID] = session
+            self:wakeupAccept()
         end
     end
 end
@@ -112,16 +107,14 @@ function TcpService:connect(ip, port, timeout, useOpenSSL)
         useOpenSSL = false
     end
     
-    local server = self
-
     local uid = AsyncConnect.AsyncConnect(ip, port, timeout, function (fd, uid)
         local isFailed = fd == -1
         if not isFailed then
-            isFailed = not CoreDD:addSessionToService(server.serviceID, fd, uid, useOpenSSL)
+            isFailed = not CoreDD:addSessionToService(self.serviceID, fd, uid, useOpenSSL)
         end
 
         if isFailed then
-            local waitCo = server.connectedCo[uid]
+            local waitCo = self.connectedCo[uid]
             if waitCo ~= nil then
                 self.connectedCo[uid] = nil
                 coroutine_wakeup(waitCo)
@@ -129,7 +122,7 @@ function TcpService:connect(ip, port, timeout, useOpenSSL)
         end
     end)
 
-    server.connectedCo[uid] = coroutine_running()
+    self.connectedCo[uid] = coroutine_running()
     coroutine_sleep(coroutine_running(), timeout)
     --寻找uid对应的session
     local session = self.connectedSessions[uid]
