@@ -380,7 +380,7 @@ private:
         mNetMsgList.SyncRead(0);
 
         std::shared_ptr<NetMsg> msg = nullptr;
-        while (mNetMsgList.PopFront(&msg))
+        while (mNetMsgList.PopFront(msg))
         {
             if (msg->mType == NetMsgType::NMT_ENTER)
             {
@@ -447,7 +447,7 @@ private:
         mAsyncConnectResultList.SyncRead(0);
 
         AsyncConnectResult result;
-        while (mAsyncConnectResultList.PopFront(&result))
+        while (mAsyncConnectResultList.PopFront(result))
         {
             lua_tinker::call<void>(L, "__on_async_connectd__", (int)result.fd, result.uid);
         }
@@ -469,7 +469,6 @@ private:
 
     std::unordered_map<int, LuaTcpService::PTR> mServiceList;
     int                                         mNextServiceID;
-
 };
 
 static std::string luaSha1(const std::string& str)
