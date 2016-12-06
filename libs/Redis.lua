@@ -190,6 +190,31 @@ function RedisSession:_do_cmd(...)
     return _a, _b
 end
 
+function RedisSession:hmset(hashname, ...)
+    if select('#', ...) == 1 then
+        local t = select(1, ...)
+
+        local n = 0
+        for k, v in pairs(t) do
+            n = n + 2
+        end
+
+        local array = {}
+
+        local i = 0
+        for k, v in pairs(t) do
+            array[i + 1] = k
+            array[i + 2] = v
+            i = i + 2
+        end
+        -- print("key", hashname)
+        return self:_do_cmd("hmset", hashname, unpack(array))
+    end
+
+    -- backwards compatibility
+    return self:_do_cmd("hmset", hashname, ...)
+end
+
 function RedisSession:waitPipelineCo()
     local current = coroutine_running()
     if self.pipelineCo ~= nil and self.pipelineCo ~= current then

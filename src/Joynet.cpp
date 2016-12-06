@@ -11,7 +11,7 @@
 #include "EventLoop.h"
 #include "DataSocket.h"
 #include "TCPService.h"
-#include "msgqueue.h"
+#include "MsgQueue.h"
 #include "connector.h"
 
 #include "lua_tinker.h"
@@ -24,6 +24,9 @@
 #ifdef USE_ZLIB
 #include "zlib.h"
 #endif
+
+using namespace dodo;
+using namespace dodo::net;
 
 static lua_State* L = nullptr;
 
@@ -143,15 +146,15 @@ public:
         mAsyncConnectResultList.clear();
         mNetMsgList.clear();
 
-        mTimerMgr->Clear();
+        mTimerMgr->clear();
         mTimerList.clear();
     }
 
     void    createAsyncConnectorThread()
     {
         mAsyncConnector->startThread([this](sock fd, int64_t uid){
-            mAsyncConnectResultList.Push(AsyncConnectResult{ fd, uid });
-            mAsyncConnectResultList.ForceSyncWrite();
+            mAsyncConnectResultList.push(AsyncConnectResult{ fd, uid });
+            mAsyncConnectResultList.forceSyncWrite();
             mLogicLoop.wakeup();
         });
     }
@@ -170,7 +173,7 @@ public:
     {
         auto id = mTimerIDCreator.claim();
 
-        auto timer = mTimerMgr->AddTimer(delayMs, [=](){
+        auto timer = mTimerMgr->addTimer(delayMs, [=](){
             mTimerList.erase(id);
             lua_tinker::call<void>(L, callback.c_str(), id);
         });
@@ -184,7 +187,7 @@ public:
     {
         auto id = mTimerIDCreator.claim();
 
-        auto timer = mTimerMgr->AddTimer(delayMs, [=](){
+        auto timer = mTimerMgr->addTimer(delayMs, [=](){
 
             mTimerList.erase(id);
 
@@ -218,7 +221,7 @@ public:
         auto it = mTimerList.find(id);
         if (it != mTimerList.end())
         {
-            (*it).second.lock()->Cancel();
+            (*it).second.lock()->cancel();
             mTimerList.erase(it);
         }
     }
@@ -295,12 +298,12 @@ public:
 
     void    loop()
     {
-        mLogicLoop.loop(mTimerMgr->IsEmpty() ? 100 : mTimerMgr->NearEndMs());
+        mLogicLoop.loop(mTimerMgr->isEmpty() ? 100 : mTimerMgr->nearEndMs());
 
         processNetMsg();
         processAsyncConnectResult();
 
-        mTimerMgr->Schedule();
+        mTimerMgr->schedule();
     }
 
     int     createTCPService()
@@ -314,10 +317,10 @@ public:
         luaTcpService->mTcpService->startWorkerThread(ox_getcpunum(), [=](EventLoop& l){
             /*每帧回调函数里强制同步rwlist*/
             lockMsgList();
-            mNetMsgList.ForceSyncWrite();
+            mNetMsgList.forceSyncWrite();
             unlockMsgList();
 
-            if (mNetMsgList.SharedListSize() > 0)
+            if (mNetMsgList.sharedListSize() > 0)
             {
                 mLogicLoop.wakeup();
             }
@@ -359,7 +362,7 @@ private:
         }
 
         lockMsgList();
-        mNetMsgList.Push(std::move(msg));
+        mNetMsgList.push(std::move(msg));
         unlockMsgList();
 
         mLogicLoop.wakeup();
@@ -377,10 +380,10 @@ private:
 
     void    processNetMsg()
     {
-        mNetMsgList.SyncRead(0);
+        mNetMsgList.syncRead(0);
 
         std::shared_ptr<NetMsg> msg = nullptr;
-        while (mNetMsgList.PopFront(msg))
+        while (mNetMsgList.popFront(msg))
         {
             if (msg->mType == NetMsgType::NMT_ENTER)
             {
@@ -444,10 +447,10 @@ private:
 
     void    processAsyncConnectResult()
     {
-        mAsyncConnectResultList.SyncRead(0);
+        mAsyncConnectResultList.syncRead(0);
 
         AsyncConnectResult result;
-        while (mAsyncConnectResultList.PopFront(result))
+        while (mAsyncConnectResultList.popFront(result))
         {
             lua_tinker::call<void>(L, "__on_async_connectd__", (int)result.fd, result.uid);
         }
@@ -455,7 +458,7 @@ private:
 
 private:
     std::mutex                                  mNetMsgMutex;
-    MsgQueue<std::shared_ptr<NetMsg>>           mNetMsgList;
+    MsgQueue<std::shared_ptr<NetMsg>>     mNetMsgList;
 
     EventLoop                                   mLogicLoop;
 

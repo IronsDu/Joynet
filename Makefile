@@ -5,7 +5,7 @@ source = src/Joynet.cpp\
 		3rdparty/accumulation-dev/src/net/SocketLibFunction.c\
 		3rdparty/accumulation-dev/src/net/TCPService.cpp\
 		3rdparty/accumulation-dev/src/utils/buffer.c\
-		3rdparty/accumulation-dev/src/utils/connector.cpp\
+		3rdparty/accumulation-dev/src/net/Connector.cpp\
 		3rdparty/accumulation-dev/src/utils/fdset.c\
 		3rdparty/accumulation-dev/src/utils/array.c\
 		3rdparty/accumulation-dev/src/utils/SHA1.cpp\
@@ -13,7 +13,7 @@ source = src/Joynet.cpp\
 		3rdparty/accumulation-dev/src/utils/ox_file.cpp\
 		3rdparty/accumulation-dev/src/utils/systemlib.c\
 		3rdparty/accumulation-dev/src/utils/md5calc.cpp\
-		3rdparty/accumulation-dev/src/timer/timer.cpp\
+		3rdparty/accumulation-dev/src/timer/Timer.cpp\
 		3rdparty/lua_tinker/lua_tinker.cpp\
 
 LUADIR = /usr/local/include

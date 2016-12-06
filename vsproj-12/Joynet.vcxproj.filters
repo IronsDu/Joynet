@@ -45,9 +45,6 @@
     <ClCompile Include="..\3rdparty\accumulation-dev\src\net\TCPService.cpp">
       <Filter>net</Filter>
     </ClCompile>
-    <ClCompile Include="..\3rdparty\accumulation-dev\src\utils\connector.cpp">
-      <Filter>net</Filter>
-    </ClCompile>
     <ClCompile Include="..\3rdparty\accumulation-dev\src\utils\fdset.c">
       <Filter>net</Filter>
     </ClCompile>
@@ -75,6 +72,9 @@
     <ClCompile Include="..\3rdparty\accumulation-dev\src\utils\base64.cpp">
       <Filter>utils</Filter>
     </ClCompile>
+    <ClCompile Include="..\3rdparty\accumulation-dev\src\net\Connector.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\3rdparty\accumulation-dev\src\net\TCPService.h">
@@ -99,9 +99,6 @@
       <Filter>net</Filter>
     </ClInclude>
     <ClInclude Include="..\3rdparty\accumulation-dev\src\net\SocketLibTypes.h">
-      <Filter>net</Filter>
-    </ClInclude>
-    <ClInclude Include="..\3rdparty\accumulation-dev\src\utils\connector.h">
       <Filter>net</Filter>
     </ClInclude>
     <ClInclude Include="..\3rdparty\accumulation-dev\src\utils\fdset.h">
@@ -133,6 +130,9 @@
     </ClInclude>
     <ClInclude Include="..\3rdparty\accumulation-dev\src\utils\base64.h">
       <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\3rdparty\accumulation-dev\src\net\Connector.h">
+      <Filter>net</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
