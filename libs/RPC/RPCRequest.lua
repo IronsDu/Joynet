@@ -31,6 +31,14 @@ function RpcRequest:getData()
     return self._data
 end
 
+function RpcRequest:getRemoteAddr()
+    return self._remoteAddr
+end
+
+function RpcRequest:getRemotePort()
+    return self._remotePort
+end
+
 function RpcRequest:reply(data)
     if self:isSync() then
         RPCCall.RPCReply(self._remoteAddr, self._remotePort, self._callerServiceID, data, nil, self._callerReqID)

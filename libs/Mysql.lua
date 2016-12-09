@@ -57,7 +57,7 @@ end
 
 local function _set_byte2(n)
     return strchar((n&0xff),
-					(n>>8)&0xff)
+                    (n>>8)&0xff)
 end
 
 local function _set_byte3(n)
@@ -70,7 +70,7 @@ local function _set_byte4(n)
     return strchar(n&0xff,
                    (n>>8)&0xff,
                    (n>>16)&0xff,
-				   (n>>24)&0xff)
+                   (n>>24)&0xff)
 end
 
 local function _from_cstring(data, i)
@@ -121,7 +121,7 @@ local function _recv_packet(self)
     if not data then
         return nil, nil, "failed to receive packet header: " .. err
     end
-	
+
     local len, pos = _get_byte3(data, 1)
 
     if len == 0 then
@@ -132,7 +132,7 @@ local function _recv_packet(self)
         return nil, nil, "packet size too big: " .. len .. "max len:" .. self._max_packet_size
     end
     local num = strbyte(data, pos)
-	
+
     self.packet_no = num
 
     data, err = self.tcpsession:receive(len)
@@ -328,7 +328,7 @@ local function _connect(self, tcpservice, ip, port, timeout, database, user, pas
 
     self.compact = false
 
-	self.tcpsession = tcpservice:connect(ip, port, timeout)
+    self.tcpsession = tcpservice:connect(ip, port, timeout)
 
     if self.tcpsession == nil then
         return nil, 'failed to connect: '
@@ -401,7 +401,7 @@ local function _connect(self, tcpservice, ip, port, timeout, database, user, pas
     local packet_len = 4 + 4 + 1 + 23 + #user + 1
         + #token + 1 + #database + 1
 
-	_send_packet(self, req, packet_len)
+    _send_packet(self, req, packet_len)
 
     local packet, typ, err = _recv_packet(self)
     if not packet then
@@ -422,17 +422,17 @@ local function _connect(self, tcpservice, ip, port, timeout, database, user, pas
     end
 
     self.state = STATE_CONNECTED
-	
+
     return true
 end
 
 function MysqlSession:connect(tcpservice, ip, port, timeout, database, user, password)
-	local tcpsession = self.tcpsession
+    local tcpsession = self.tcpsession
     if tcpsession then
         return nil, "already initialized"
     end
-	
-	local isOK, err = _connect(self, tcpservice, ip, port, timeout, database, user, password)
+
+    local isOK, err = _connect(self, tcpservice, ip, port, timeout, database, user, password)
     self.tcpsession:releaseRecvLock()
     if not isOK and self.tcpsession ~= nil then
         self.tcpsession:postClose()
@@ -447,7 +447,7 @@ local function send_query(self, query)
         return nil, "cannot send query in the current context: "
                     .. (self.state or "nil")
     end
-	
+
     local tcpsession = self.tcpsession
     if not tcpsession then
         return nil, "not initialized"
@@ -458,7 +458,7 @@ local function send_query(self, query)
     local cmd_packet = strchar(COM_QUERY) .. query
     local packet_len = 1 + #query
 
-	_send_packet(self, cmd_packet, packet_len)
+    _send_packet(self, cmd_packet, packet_len)
 
     self.state = STATE_COMMAND_SENT
 end
@@ -478,7 +478,7 @@ local function read_result(self)
     if not packet then
         return nil, err
     end
-	
+
     if typ == "ERR" then
         self.state = STATE_CONNECTED
 
@@ -553,7 +553,7 @@ local function read_result(self)
 end
 
 function MysqlSession:query(query)
-	local current = coroutine_running()
+    local current = coroutine_running()
     if self.queryControl ~= nil and self.queryControl ~= current then
         --同时只允许一个协程进行query,存在进行中的query时，其他协程需要等待
         table.insert(self.pendingQueryCo, current)
@@ -567,11 +567,11 @@ function MysqlSession:query(query)
     else
         self.queryControl = current
     end
-	
-	send_query(self, query)
+
+    send_query(self, query)
     local res, err =  read_result(self)
-	
-	self.tcpsession:releaseRecvLock()
+
+    self.tcpsession:releaseRecvLock()
 
     if self.tcpsession:isClose() then
         self.state = STATE_NONE
@@ -587,8 +587,8 @@ function MysqlSession:query(query)
             coroutine_wakeup(self.queryControl)
         end
     end
-	
-	return res, err
+
+    return res, err
 end
 
 local function MysqlSessionNew(p)

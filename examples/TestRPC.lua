@@ -1,15 +1,16 @@
 package.path = "./src/?.lua;./libs/?.lua;./libs/RPC/?.lua;"
 require("Joynet")
+
 local Service = require "RPCService"
 local RPCCall = require "RPCCall"
 local harbor = require "harbor"
+
 local function userMain()
     --一个进程最多只能允许一个harbor
     --一个物理机允许多个进程,但各自的harbor监听不同的端口
     harbor.OpenHarbor(8888)
     
     coroutine_start(function()
-    
         local server = Service:New()
         server:setName("echoServer")
         
@@ -58,8 +59,5 @@ end)
 while true
 do
     CoreDD:loop()
-    while coroutine_pengdingnum() > 0
-    do
-        coroutine_schedule()
-    end
+    coroutine_schedule()
 end

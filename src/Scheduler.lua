@@ -16,10 +16,10 @@ local scheduler =
 }
 
 function scheduler:new(o)
-  o = o or {}   
-  setmetatable(o, self)
-  self.__index = self
-  return o
+    o = o or {}   
+    setmetatable(o, self)
+    self.__index = self
+    return o
 end
 
 --强制唤醒

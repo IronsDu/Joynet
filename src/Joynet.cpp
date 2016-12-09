@@ -458,7 +458,7 @@ private:
 
 private:
     std::mutex                                  mNetMsgMutex;
-    MsgQueue<std::shared_ptr<NetMsg>>     mNetMsgList;
+    MsgQueue<std::shared_ptr<NetMsg>>           mNetMsgList;
 
     EventLoop                                   mLogicLoop;
 
