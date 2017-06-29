@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <cassert>
 
 #include "systemlib.h"
 #include "SocketLibFunction.h"
@@ -25,8 +26,8 @@
 #include "zlib.h"
 #endif
 
-using namespace dodo;
-using namespace dodo::net;
+using namespace brynet;
+using namespace brynet::net;
 
 static lua_State* L = nullptr;
 
@@ -96,7 +97,7 @@ struct LuaTcpService
 
     LuaTcpService()
     {
-        mTcpService = std::make_shared<TcpService>();
+        mTcpService = TcpService::Create();
     }
 
     int                                             mServiceID;
@@ -122,7 +123,7 @@ public:
     {
         mTimerMgr = std::make_shared<TimerMgr>();
         mNextServiceID = 0;
-        mAsyncConnector = std::make_shared<ThreadConnector>();
+        mAsyncConnector = ThreadConnector::Create();
 
         createAsyncConnectorThread();
     }
@@ -152,10 +153,15 @@ public:
 
     void    createAsyncConnectorThread()
     {
-        mAsyncConnector->startThread([this](sock fd, int64_t uid){
-            mAsyncConnectResultList.push(AsyncConnectResult{ fd, uid });
-            mAsyncConnectResultList.forceSyncWrite();
-            mLogicLoop.wakeup();
+        mAsyncConnector->startThread([this](sock fd, const std::any& uid){
+            auto puid = std::any_cast<int64_t>(&uid);
+            assert(puid != nullptr);
+            if (puid != nullptr)
+            {
+                mAsyncConnectResultList.push(AsyncConnectResult{ fd, *puid });
+                mAsyncConnectResultList.forceSyncWrite();
+                mLogicLoop.wakeup();
+            }
         });
     }
 
@@ -314,7 +320,7 @@ public:
         luaTcpService->mServiceID = mNextServiceID;
         mServiceList[luaTcpService->mServiceID] = luaTcpService;
 
-        luaTcpService->mTcpService->startWorkerThread(ox_getcpunum(), [=](EventLoop& l){
+        luaTcpService->mTcpService->startWorkerThread(ox_getcpunum(), [=](EventLoop::PTR eventLoop){
             /*每帧回调函数里强制同步rwlist*/
             lockMsgList();
             mNetMsgList.forceSyncWrite();

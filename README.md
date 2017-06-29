@@ -11,8 +11,7 @@ Joynet 的网络底层使用多线程，但Lua (层面)是运行在单线程上�
 ## 构建
 使用 `git clone`迁出项目并进入项目根目录，并依次使用 `git submodule init`和`git submodule update` 下载依赖项.
 
-* Windows : 在项目根目录中打开 `Joynet.sln`, 编译后会在当前目录生成 `Joynet.dll`
-* Linux : 在项目根目录执行 `make` 生成 `Joynet.so`
+然后使用cmake进行构建Joynet动态库
 
 ## 使用
 [`examples`](https://github.com/IronsDu/Joynet/tree/master/examples) 目录包含测试代码。
