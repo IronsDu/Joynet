@@ -13,7 +13,7 @@
 #include "DataSocket.h"
 #include "TCPService.h"
 #include "MsgQueue.h"
-#include "connector.h"
+#include "Connector.h"
 
 #include "lua_tinker.h"
 #include "NonCopyable.h"

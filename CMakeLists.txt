@@ -54,6 +54,7 @@ link_directories("${PROJECT_SOURCE_DIR}/3rdparty/zlib")
 
 add_library(Joynet SHARED ${net_src_list} ${timer_src_list} ${base_src_list} ${lua_tinker_src_list} ${utils_src_list} ${PROJECT_SOURCE_DIR}/src/Joynet.cpp)
 
+set_target_properties(Joynet PROPERTIES PREFIX "")
 if(WIN32)
   target_link_libraries(Joynet ws2_32 libz.lib lua53.lib)
 elseif(UNIX)
