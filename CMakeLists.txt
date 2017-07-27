@@ -15,7 +15,7 @@ set(net_src_list
 	${PROJECT_SOURCE_DIR}/3rdparty/brynet/src/net/TCPService.cpp
 	${PROJECT_SOURCE_DIR}/3rdparty/brynet/src/net/WrapTCPService.cpp
 	${PROJECT_SOURCE_DIR}/3rdparty/brynet/src/net/Connector.cpp
-	${PROJECT_SOURCE_DIR}/3rdparty/brynet/src/utils/fdset.c
+	${PROJECT_SOURCE_DIR}/3rdparty/brynet/src/net/fdset.c
 )
 
 set(timer_src_list
@@ -61,3 +61,5 @@ elseif(UNIX)
   find_package(Threads REQUIRED)
   target_link_libraries(Joynet Threads::Threads)
 endif()
+
+set_target_properties(Joynet PROPERTIES LINKER_LANGUAGE CXX)

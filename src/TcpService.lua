@@ -2,6 +2,7 @@ require "Scheduler"
 local AsyncConnect = require "Connect"
 local TcpSession = require "TcpSession"
 
+CoreDD = JoynetCore()
 local __TcpServiceList = {}
 
 function __on_enter__(serviceID, socketID)

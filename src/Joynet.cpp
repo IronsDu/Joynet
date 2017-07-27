@@ -21,75 +21,12 @@
 #include "SHA1.h"
 #include "base64.h"
 #include "http/WebSocketFormat.h"
-
-#ifdef USE_ZLIB
-#include "zlib.h"
-#endif
+#include "utils.h"
 
 using namespace brynet;
 using namespace brynet::net;
 
 static lua_State* L = nullptr;
-
-class IdCreator : public NonCopyable
-{
-public:
-    IdCreator()
-    {
-        mIncID = 0;
-    }
-
-    int64_t claim()
-    {
-        int64_t id = 0;
-        id |= (ox_getnowtime() / 1000 << 32);
-        id |= (mIncID++);
-
-        return id;
-    }
-
-private:
-    int32_t     mIncID;
-};
-
-struct AsyncConnectResult
-{
-    sock fd;
-    int64_t uid;
-};
-
-enum class NetMsgType
-{
-    NMT_ENTER,      /*链接进入*/
-    NMT_CLOSE,      /*链接断开*/
-    NMT_RECV_DATA,  /*收到消息*/
-    NMT_CONNECTED,  /*向外建立的链接*/
-};
-
-struct NetMsg
-{
-    NetMsg(int serviceID, NetMsgType type, int64_t id) : mServiceID(serviceID), mType(type), mID(id)
-    {
-    }
-
-    void        setData(const char* data, size_t len)
-    {
-        mData = std::string(data, len);
-    }
-
-    int         mServiceID;
-    NetMsgType  mType;
-    int64_t     mID;
-    std::string mData;
-};
-
-struct LuaTcpSession
-{
-    typedef std::shared_ptr<LuaTcpSession> PTR;
-
-    int64_t         mID;
-    std::string     mRecvData;
-};
 
 struct LuaTcpService
 {
@@ -102,7 +39,6 @@ struct LuaTcpService
 
     int                                             mServiceID;
     TcpService::PTR                                 mTcpService;
-    std::unordered_map<int64_t, LuaTcpSession::PTR> mSessions;
 };
 
 static int64_t monitorTime = ox_getnowtime();
@@ -123,7 +59,7 @@ public:
     {
         mTimerMgr = std::make_shared<TimerMgr>();
         mNextServiceID = 0;
-        mAsyncConnector = ThreadConnector::Create();
+        mAsyncConnector = AsyncConnector::Create();
 
         createAsyncConnectorThread();
     }
@@ -138,14 +74,10 @@ public:
         for (auto& v : mServiceList)
         {
             v.second->mTcpService->closeService();
-            v.second->mSessions.clear();
         }
         mServiceList.clear();
 
         mAsyncConnector->destroy();
-
-        mAsyncConnectResultList.clear();
-        mNetMsgList.clear();
 
         mTimerMgr->clear();
         mTimerList.clear();
@@ -154,15 +86,22 @@ public:
     void    createAsyncConnectorThread()
     {
         mAsyncConnector->startThread([this](sock fd, const std::any& uid){
-            auto puid = std::any_cast<int64_t>(&uid);
-            assert(puid != nullptr);
-            if (puid != nullptr)
-            {
-                mAsyncConnectResultList.push(AsyncConnectResult{ fd, *puid });
-                mAsyncConnectResultList.forceSyncWrite();
-                mLogicLoop.wakeup();
-            }
+            pushAsyncConnectorResult(fd, uid);
+        }, [this](const std::any& uid) {
+            pushAsyncConnectorResult(-1, uid);
         });
+    }
+
+    void    pushAsyncConnectorResult(sock fd, const std::any& uid)
+    {
+        auto puid = std::any_cast<int64_t>(&uid);
+        assert(puid != nullptr);
+        if (puid != nullptr)
+        {
+            mLogicLoop.pushAsyncProc([fd, uid = *puid]() {
+                lua_tinker::call<void>(L, "__on_async_connectd__", fd, uid);
+            });
+        }
     }
 
     void    startMonitor()
@@ -238,12 +177,7 @@ public:
         if (it != mServiceList.end())
         {
             auto& service = (*it).second;
-            auto sessionIT = service->mSessions.find(socketID);
-            if (sessionIT != service->mSessions.end())
-            {
-                service->mTcpService->disConnect(socketID);
-                service->mSessions.erase(sessionIT);
-            }
+            service->mTcpService->disConnect(socketID);
         }
     }
 
@@ -252,12 +186,7 @@ public:
         auto it = mServiceList.find(serviceID);
         if (it != mServiceList.end())
         {
-            auto& service = (*it).second;
-            auto sessionIT = service->mSessions.find(socketID);
-            if (sessionIT != service->mSessions.end())
-            {
-                service->mTcpService->shutdown(socketID);
-            }
+            (*it).second->mTcpService->shutdown(socketID);
         }
     }
 
@@ -266,12 +195,7 @@ public:
         auto it = mServiceList.find(serviceID);
         if (it != mServiceList.end())
         {
-            auto& service = (*it).second;
-            auto sessionIT = service->mSessions.find(socketID);
-            if (sessionIT != service->mSessions.end())
-            {
-                service->mTcpService->send(socketID, DataSocket::makePacket(data, len), nullptr);
-            }
+            (*it).second->mTcpService->send(socketID, DataSocket::makePacket(data, len), nullptr);
         }
     }
 
@@ -285,9 +209,10 @@ public:
             ox_socket_nodelay(fd);
             auto serviceID = (*it).second->mServiceID;
             auto& service = (*it).second->mTcpService;
-            ret = service->addDataSocket(fd, [=](int64_t id, std::string ip){
-                auto uidStr = std::to_string(uid);
-                pushMsg(serviceID, NetMsgType::NMT_CONNECTED, id, uidStr.c_str(), uidStr.size());
+            ret = service->addDataSocket(fd, [=](int64_t id, const std::string& ip){
+                mLogicLoop.pushAsyncProc([this, serviceID, id, uid]() {
+                    lua_tinker::call<void>(L, "__on_connected__", serviceID, id, uid);
+                });
 
             }, service->getDisconnectCallback(), service->getDataCallback(), useSSL, 1024 * 1024, false);
         }
@@ -305,10 +230,6 @@ public:
     void    loop()
     {
         mLogicLoop.loop(mTimerMgr->isEmpty() ? 100 : mTimerMgr->nearEndMs());
-
-        processNetMsg();
-        processAsyncConnectResult();
-
         mTimerMgr->schedule();
     }
 
@@ -320,28 +241,25 @@ public:
         luaTcpService->mServiceID = mNextServiceID;
         mServiceList[luaTcpService->mServiceID] = luaTcpService;
 
-        luaTcpService->mTcpService->startWorkerThread(ox_getcpunum(), [=](EventLoop::PTR eventLoop){
-            /*每帧回调函数里强制同步rwlist*/
-            lockMsgList();
-            mNetMsgList.forceSyncWrite();
-            unlockMsgList();
+        luaTcpService->mTcpService->startWorkerThread(ox_getcpunum());
 
-            if (mNetMsgList.sharedListSize() > 0)
-            {
-                mLogicLoop.wakeup();
-            }
-        });
-
-        luaTcpService->mTcpService->setEnterCallback([=](int64_t id, std::string ip){
-            pushMsg(luaTcpService->mServiceID, NetMsgType::NMT_ENTER, id);
+        luaTcpService->mTcpService->setEnterCallback([=](int64_t id, const std::string& ip){
+            mLogicLoop.pushAsyncProc([serviceID = luaTcpService->mServiceID, id, this]() {
+                lua_tinker::call<void>(L, "__on_enter__", serviceID, id);
+            });
         });
 
         luaTcpService->mTcpService->setDisconnectCallback([=](int64_t id){
-            pushMsg(luaTcpService->mServiceID, NetMsgType::NMT_CLOSE, id);
+            mLogicLoop.pushAsyncProc([serviceID = luaTcpService->mServiceID, id, this]() {
+                lua_tinker::call<void>(L, "__on_close__", serviceID, id);
+            });
         });
 
         luaTcpService->mTcpService->setDataCallback([=](int64_t id, const char* buffer, size_t len){
-            pushMsg(luaTcpService->mServiceID, NetMsgType::NMT_RECV_DATA, id, buffer, len);
+            mLogicLoop.pushAsyncProc([serviceID = luaTcpService->mServiceID, id, this, data = std::string(buffer, len)]() {
+                int consumeLen = lua_tinker::call<int>(L, "__on_data__", serviceID, id, data, data.size());
+                assert(consumeLen >= 0);
+            });
             return len;
         });
 
@@ -353,221 +271,23 @@ public:
         auto it = mServiceList.find(serviceID);
         if (it != mServiceList.end())
         {
-            auto& service = (*it).second;
-            service->mTcpService->startListen(false, ip, port, 1024 * 1024, nullptr, nullptr);
+            (*it).second->mTcpService->startListen(false, ip, port, 1024 * 1024, nullptr, nullptr);
         }
     }
 
 private:
-    void    pushMsg(int serviceID, NetMsgType type, int64_t id, const char* data = nullptr, size_t dataLen = 0)
-    {
-        auto msg = std::make_shared<NetMsg>(serviceID, type, id);
-        if (data != nullptr)
-        {
-            msg->setData(data, dataLen);
-        }
-
-        lockMsgList();
-        mNetMsgList.push(std::move(msg));
-        unlockMsgList();
-
-        mLogicLoop.wakeup();
-    }
-
-    void    lockMsgList()
-    {
-        mNetMsgMutex.lock();
-    }
-
-    void    unlockMsgList()
-    {
-        mNetMsgMutex.unlock();
-    }
-
-    void    processNetMsg()
-    {
-        mNetMsgList.syncRead(0);
-
-        std::shared_ptr<NetMsg> msg = nullptr;
-        while (mNetMsgList.popFront(msg))
-        {
-            if (msg->mType == NetMsgType::NMT_ENTER)
-            {
-                auto luaSocket = std::make_shared<LuaTcpSession>();
-                mServiceList[msg->mServiceID]->mSessions[msg->mID] = luaSocket;
-
-                lua_tinker::call<void>(L, "__on_enter__", msg->mServiceID, msg->mID);
-            }
-            else if (msg->mType == NetMsgType::NMT_CLOSE)
-            {
-                mServiceList[msg->mServiceID]->mSessions.erase(msg->mID);
-                lua_tinker::call<void>(L, "__on_close__", msg->mServiceID, msg->mID);
-            }
-            else if (msg->mType == NetMsgType::NMT_RECV_DATA)
-            {
-                bool isFind = false;
-
-                auto serviceIT = mServiceList.find(msg->mServiceID);
-                if (serviceIT != mServiceList.end())
-                {
-                    auto it = (*serviceIT).second->mSessions.find(msg->mID);
-                    if (it != (*serviceIT).second->mSessions.end())
-                    {
-                        isFind = true;
-
-                        auto& client = (*it).second;
-                        client->mRecvData += msg->mData;
-
-                        int consumeLen = lua_tinker::call<int>(L, "__on_data__", msg->mServiceID, msg->mID, client->mRecvData, client->mRecvData.size());
-                        assert(consumeLen >= 0);
-                        if (consumeLen == client->mRecvData.size())
-                        {
-                            client->mRecvData.clear();
-                        }
-                        else
-                        {
-                            client->mRecvData.erase(0, consumeLen);
-                        }
-                    }
-                }
-
-                assert(isFind);
-                if (!isFind)
-                {
-                    std::cout << "not found session id" << msg->mID << std::endl;
-                }
-            }
-            else if (msg->mType == NetMsgType::NMT_CONNECTED)
-            {
-                auto luaSocket = std::make_shared<LuaTcpSession>();
-                mServiceList[msg->mServiceID]->mSessions[msg->mID] = luaSocket;
-                int64_t uid = strtoll(msg->mData.c_str(), NULL, 10);
-                lua_tinker::call<void>(L, "__on_connected__", msg->mServiceID, msg->mID, uid);
-            }
-            else
-            {
-                assert(false);
-            }
-        }
-    }
-
-    void    processAsyncConnectResult()
-    {
-        mAsyncConnectResultList.syncRead(0);
-
-        AsyncConnectResult result;
-        while (mAsyncConnectResultList.popFront(result))
-        {
-            lua_tinker::call<void>(L, "__on_async_connectd__", (int)result.fd, result.uid);
-        }
-    }
-
-private:
-    std::mutex                                  mNetMsgMutex;
-    MsgQueue<std::shared_ptr<NetMsg>>           mNetMsgList;
-
     EventLoop                                   mLogicLoop;
 
-    IdCreator                                   mTimerIDCreator;
+    Joynet::IdCreator                           mTimerIDCreator;
     TimerMgr::PTR                               mTimerMgr;
     std::unordered_map<int64_t, Timer::WeakPtr> mTimerList;
 
-    IdCreator                                   mAsyncConnectIDCreator;
-    ThreadConnector::PTR                        mAsyncConnector;
-    MsgQueue<AsyncConnectResult>                mAsyncConnectResultList;
+    Joynet::IdCreator                           mAsyncConnectIDCreator;
+    AsyncConnector::PTR                         mAsyncConnector;
 
     std::unordered_map<int, LuaTcpService::PTR> mServiceList;
     int                                         mNextServiceID;
 };
-
-static std::string luaSha1(const std::string& str)
-{
-    CSHA1 sha1;
-    sha1.Update((unsigned char*)str.c_str(), str.size());
-    sha1.Final();
-    return std::string((char*)sha1.m_digest, sizeof(sha1.m_digest));
-}
-
-static std::string luaMd5(const char* str)
-{
-    char digest[1024];
-    memset(digest, 0, sizeof(digest));
-    MD5_String(str, digest);
-    return std::string((const char*)digest, 32);
-}
-
-static std::string luaBase64(const std::string& str)
-{
-    return base64_encode((const unsigned char *)str.c_str(), str.size());
-}
-
-static std::string GetIPOfHost(const std::string& host)
-{
-    std::string ret;
-
-    struct hostent *hptr = gethostbyname(host.c_str());
-    if (hptr != NULL)
-    {
-        if (hptr->h_addrtype == AF_INET)
-        {
-            char* lll = *(hptr->h_addr_list);
-            char tmp[1024];
-            sprintf(tmp, "%d.%d.%d.%d", lll[0] & 0x00ff, lll[1] & 0x00ff, lll[2] & 0x00ff, lll[3] & 0x00ff);
-            ret = tmp;
-        }
-    }
-
-    return ret;
-}
-
-static std::string UtilsWsHandshakeResponse(const std::string& sec)
-{
-    return WebSocketFormat::wsHandshake(sec);
-}
-
-#ifdef USE_ZLIB
-static std::string ZipUnCompress(const char* src, size_t len)
-{
-    static const size_t tmpLen = 64 * 1204 * 1024;
-    static char* tmp = new char[tmpLen];
-
-    int err = 0;
-    z_stream d_stream = { 0 }; /* decompression stream */
-    static char dummy_head[2] = {
-        0x8 + 0x7 * 0x10,
-        (((0x8 + 0x7 * 0x10) * 0x100 + 30) / 31 * 31) & 0xFF,
-    };
-    d_stream.zalloc = NULL;
-    d_stream.zfree = NULL;
-    d_stream.opaque = NULL;
-    d_stream.next_in = (Bytef*)src;
-    d_stream.avail_in = 0;
-    d_stream.next_out = (Bytef*)tmp;
-
-    if (inflateInit2(&d_stream, MAX_WBITS + 16) != Z_OK) return std::string();
-
-    size_t ndata = tmpLen;
-    while (d_stream.total_out < ndata && d_stream.total_in < len) {
-        d_stream.avail_in = d_stream.avail_out = 1; /* force small buffers */
-        if ((err = inflate(&d_stream, Z_NO_FLUSH)) == Z_STREAM_END) break;
-        if (err != Z_OK) {
-            if (err == Z_DATA_ERROR) {
-                d_stream.next_in = (Bytef*)dummy_head;
-                d_stream.avail_in = sizeof(dummy_head);
-                if ((err = inflate(&d_stream, Z_NO_FLUSH)) != Z_OK) {
-                    return std::string();
-                }
-            }
-            else return std::string();
-        }
-    }
-    if (inflateEnd(&d_stream) != Z_OK) return std::string();
-    ndata = d_stream.total_out;
-
-    return std::string(tmp, ndata);
-}
-
-#endif
 
 extern "C"
 {
@@ -614,16 +334,14 @@ __declspec(dllexport)
         lua_tinker::class_def<CoreDD>(L, "addSessionToService", &CoreDD::addSessionToService);
         lua_tinker::class_def<CoreDD>(L, "asyncConnect", &CoreDD::asyncConnect);
 
-        lua_tinker::def(L, "UtilsSha1", luaSha1);
-        lua_tinker::def(L, "UtilsMd5", luaMd5);
-        lua_tinker::def(L, "GetIPOfHost", GetIPOfHost);
+        lua_tinker::def(L, "UtilsSha1", Joynet::luaSha1);
+        lua_tinker::def(L, "UtilsMd5", Joynet::luaMd5);
+        lua_tinker::def(L, "GetIPOfHost", Joynet::GetIPOfHost);
         lua_tinker::def(L, "UtilsCreateDir", ox_dir_create);
-        lua_tinker::def(L, "UtilsWsHandshakeResponse", UtilsWsHandshakeResponse);
+        lua_tinker::def(L, "UtilsWsHandshakeResponse", Joynet::UtilsWsHandshakeResponse);
     #ifdef USE_ZLIB
-        lua_tinker::def(L, "ZipUnCompress", ZipUnCompress);
+        lua_tinker::def(L, "ZipUnCompress", Joynet::ZipUnCompress);
     #endif
-
-        lua_tinker::set(L, "CoreDD", new CoreDD());
 
         return 1;
     }
