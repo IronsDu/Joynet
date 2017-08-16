@@ -3,14 +3,17 @@ require("Joynet")
 local TcpService = require "TcpService"
 local AcyncConnect = require "Connect"
 local Redis = require "Redis"
+local Scheduler = require "Scheduler"
+local joynet = JoynetCore()
+local scheduler = Scheduler.New(joynet)
 
 local totalRecvNum = 0
 
 function userMain()
-	local redisService = TcpService:New()
+	local redisService = TcpService.New(joynet, scheduler)
 	redisService:createService()
 
-	coroutine_start(function ( ... )
+	scheduler:Start(function ( ... )
 		local redis = Redis:New()
 		redis:connect(redisService, "192.168.12.128", 6979, 10000)
 		redis:set("haha", "heihei")
@@ -23,21 +26,21 @@ function userMain()
 		end
 	end)
 
-	coroutine_start(function ()
+	scheduler:Start(function ()
 			while true do
-				coroutine_sleep(coroutine_running(), 1000)
+				scheduler:SLeep(scheduler:Running(), 1000)
 				print("total recv :"..totalRecvNum.."/s")
 				totalRecvNum = 0
 			end
 		end)
 end
 
-coroutine_start(function ()
+scheduler:Start(function ()
 	userMain()
 end)
 
 while true
 do
-	CoreDD:loop()
-	coroutine_schedule()
+	joynet:loop()
+	scheduler:Scheduler()
 end

@@ -3,16 +3,19 @@ require("Joynet")
 local TcpService = require "TcpService"
 local AcyncConnect = require "Connect"
 local MYSQL = require "Mysql"
+local Scheduler = require "Scheduler"
+local joynet = JoynetCore()
+local scheduler = Scheduler.New(joynet)
 
 local totalQueryNum = 0
 
 function userMain()
-    local mysqlService = TcpService:New()
+    local mysqlService = TcpService.New(joynet, scheduler)
     mysqlService:createService()
 	local mysql = MYSQL:New()
 	local isOK, err = mysql:connect(mysqlService, "192.168.2.200", 3306, 1000, "logindb", "trAdmin", "trmysql")
     for i=1, 8 do
-        coroutine_start(function ( ... )
+        scheduler:Start(function ( ... )
             
             if not isOK then
                 print("connect failed, err:"..err)
@@ -41,21 +44,21 @@ function userMain()
         end)
     end
 
-    coroutine_start(function ()
+    scheduler:Start(function ()
         while true do
-            coroutine_sleep(coroutine_running(), 1000)
+            scheduler:Sleep(scheduler:Running(), 1000)
             print("total query :"..totalQueryNum.."/s")
             totalQueryNum = 0
         end
     end)
 end
 
-coroutine_start(function ()
+scheduler:Start(function ()
     userMain()
 end)
 
 while true
 do
-    CoreDD:loop()
-    coroutine_schedule()
+    joynet:loop()
+    scheduler:Scheduler()
 end

@@ -3,15 +3,18 @@ require("Joynet")
 local TcpService = require "TcpService"
 local AcyncConnect = require "Connect"
 local PG = require "Postgres"
+local Scheduler = require "Scheduler"
+local joynet = JoynetCore()
+local scheduler = Scheduler.New(joynet)
 
 local totalQueryNum = 0
 
 function userMain()
-    local pgService = TcpService:New()
+    local pgService = TcpService.New(joynet, scheduler)
     pgService:createService()
 
     for i=1, 10 do
-        coroutine_start(function ( ... )
+        scheduler:Start(function ( ... )
             local pg = PG:New()
             local isOK, err = pg:connect(pgService, "192.168.12.1", 5432, 1000, "postgres", "postgres", "19870323")
             if not isOK then
@@ -40,21 +43,21 @@ function userMain()
         end)
     end
 
-    coroutine_start(function ()
+    scheduler:Start(function ()
         while true do
-            coroutine_sleep(coroutine_running(), 1000)
+            scheduler:Sleep(scheduler:Running(), 1000)
             print("total query :"..totalQueryNum.."/s")
             totalQueryNum = 0
         end
     end)
 end
 
-coroutine_start(function ()
+scheduler:Start(function ()
     userMain()
 end)
 
 while true
 do
-    CoreDD:loop()
+    joynet:loop()
     coroutine_schedule()
 end

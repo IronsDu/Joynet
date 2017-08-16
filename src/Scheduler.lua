@@ -9,19 +9,23 @@ local CO_STATUS_RUNNING = 6 --运行中
 
 local scheduler =
 {
-    sleepTimer = {},
-    nowRunning = nil,
-    process = {},
-    nextPid = 1
+    
 }
 
-function scheduler:new(o)
-    o = o or {}   
-    setmetatable(o, self)
-    self.__index = self
+local function SchedulerNew(p, joynet)
+    local o = {}
+    setmetatable(o, p)
+    p.__index = p
+    
+    o.joynet = joynet
+    o.nowRunning = nil
+    o.process = {}
+    o.nextPid = 1
+
     return o
 end
 
+--coroutine_wakeup
 --强制唤醒
 function scheduler:ForceWakeup(coObj)
     if coObj.status == CO_STATUS_SLEEP then
@@ -30,6 +34,7 @@ function scheduler:ForceWakeup(coObj)
     end
 end
 
+--coroutine_running
 function scheduler:Running()
     return self.nowRunning
 end
@@ -46,22 +51,36 @@ end
 --取消sleep
 function scheduler:CancelSleep(coObj)
     if coObj.status == CO_STATUS_SLEEP then
-        if self.sleepTimer[coObj.sleepID] ~= nil then
-            CoreDD:removeTimer(coObj.sleepID)
-            self.sleepTimer[coObj.sleepID] = nil
+        if coObj.sleepID ~= nil then
+            self.joynet:removeTimer(coObj.sleepID)
         end
         
         coObj.status = CO_STATUS_NONE
     end
 end
 
+local function __scheduler_timer_callback(scheduler, sleepCo)
+    sleepCo.sleepID = nil
+    if sleepCo.status == CO_STATUS_SLEEP then
+        sleepCo.status = CO_STATUS_NONE
+        scheduler:Add2Active(sleepCo)
+    end
+end
+
+--coroutine_sleep(coObj, delay)
+--delay为nil,则为无限等待(睡眠)
 --睡眠ms
 function scheduler:Sleep(coObj,ms)
+    if coObj.sc ~= self then
+        error("sc not equal self")
+    end
+
     if coObj.status == CO_STATUS_RUNNING then
         if ms ~= nil then
-            local id = CoreDD:startTimer(ms, "__scheduler_timer_callback")
+            local id = self.joynet:startLuaTimer(ms, function()
+                    __scheduler_timer_callback(self, coObj)
+                end)
             coObj.sleepID = id
-            self.sleepTimer[id] = coObj
         end
         
         coObj.status = CO_STATUS_SLEEP
@@ -69,6 +88,7 @@ function scheduler:Sleep(coObj,ms)
     end
 end
 
+--coroutine_yield
 --暂时释放执行权
 function scheduler:Yield(coObj)
     if coObj.status == CO_STATUS_RUNNING then
@@ -80,12 +100,13 @@ function scheduler:Yield(coObj)
     end
 end
 
+--coroutine_schedule
 --主调度循环
 function scheduler:Schedule()
     for _, v in pairs(self.process) do
         self.nowRunning = v
         v.status = CO_STATUS_RUNNING
-        CoreDD:startMonitor()
+        self.joynet:startMonitor()
         local r, e = coroutine.resume(v.co,v)
         self.nowRunning = nil
         
@@ -107,49 +128,24 @@ function scheduler:Schedule()
     self.nextPid = 1
 end
 
-local sc = scheduler:new()
-
-function __scheduler_timer_callback(id)
-    local sleepCo = sc.sleepTimer[id]
-    if sleepCo ~= nil then
-        if sleepCo.status == CO_STATUS_SLEEP then
-            sleepCo.status = CO_STATUS_NONE
-            sc:Add2Active(sleepCo)
-        end
-    end
-    sc.sleepTimer[id] = nil
-end
-
-function coroutine_start(func)
+--coroutine_start(func)
+function scheduler:Start(func)
     local coObj = CoObject.New()
     coObj.status = CO_STATUS_NONE
     local co = coroutine.create(func)
-    coObj:init(sc, co)
-    sc:Add2Active(coObj)
+    coObj:init(self, co)
+    self:Add2Active(coObj)
     return coObj
 end
 
---delay为nil,则为无限等待(睡眠)
-function coroutine_sleep(coObj, delay)
-    coObj.sc:Sleep(coObj, delay)
+--coroutine_pengdingnum
+function scheduler:PendingNum()
+    return self.nextPid -1 --下一个被调度的协程的pid减1则为当前运行中的协程数量
 end
 
-function coroutine_schedule()
-    sc:Schedule()
-end
-
-function coroutine_yield(coObj)
-    coObj.sc:Yield(coObj)
-end
-
-function coroutine_running()
-    return sc:Running()
-end
-
-function coroutine_pengdingnum()
-    return sc.nextPid - 1 --下一个被调度的协程的pid减1则为当前运行中的协程数量
-end
-
-function coroutine_wakeup(coObj)
-    coObj.sc:ForceWakeup(coObj)
-end
+return {
+    New = function (joynet)
+        joynet:startMonitor()
+        return SchedulerNew(scheduler, joynet)
+    end
+}

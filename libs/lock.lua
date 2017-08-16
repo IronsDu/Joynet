@@ -3,25 +3,28 @@ require "Scheduler"
 local LinkQue  = require "linkque"
 local lock = {}
 
-function lock:new()
+function lockNew(p, scheduler)
     local o = {}
-    self.__index = self      
-    setmetatable(o,self)
+    p.__index = p      
+    setmetatable(o,p)
+
     o.block = LinkQue.New()
     o.flag  = false
     o.owner = nil
+    o.scheduler = scheduler
+
     return o
 end
 
 function lock:Lock()
-    local coObject = coroutine_running()
+    local coObject = scheduler:Running()
     assert(self.owner ~= coObject)
     
     if self.flag then
         self.block:Push(coObject)
         
         while self.flag do
-            coroutine_sleep(coObject)
+            scheduler:Sleep(coObject)
         end
     end
     
@@ -31,17 +34,17 @@ end
 
 function lock:Unlock()
     assert(self.flag == true)
-    assert(self.owner == coroutine_running())
+    assert(self.owner == scheduler:Running())
     
     self.flag = false
     self.owner = nil
     
     local coObject = self.block:Pop()
     if coObject then
-        coroutine_wakeup(coObject)
+        scheduler:ForceWakeup(coObject)
     end
 end
 
 return {
-    New = function () return lock:new() end
+    New = function(scheduler) return lockNew(lock, scheduler) end
 }

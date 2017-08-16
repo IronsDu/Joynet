@@ -3,11 +3,13 @@ require "Scheduler"
 local TcpSession = {
 }
 
-local function TcpSessionNew(p)
+local function TcpSessionNew(p, joynet, scheduler)
     local o = {}
     setmetatable(o, p)
     p.__index = p
     
+    o.joynet = joynet
+    o.scheduler = scheduler
     o.serviceID = -1
     o.socketID = -1
     o.isClosed = false
@@ -36,11 +38,11 @@ function TcpSession:isClose()
 end
 
 function TcpSession:postClose()
-    CoreDD:closeTcpSession(self.serviceID, self.socketID)
+    self.joynet:closeTcpSession(self.serviceID, self.socketID)
 end
 
 function TcpSession:postShutdown()
-    CoreDD:shutdownTcpSession(self.serviceID, self.socketID)
+    self.joynet:shutdownTcpSession(self.serviceID, self.socketID)
 end
 
 function TcpSession:parseData(data, len)
@@ -63,26 +65,26 @@ function TcpSession:parseData(data, len)
 end
 
 function TcpSession:releaseRecvLock()
-    if self.controlRecvCo == coroutine_running() then
+    if self.controlRecvCo == self.scheduler:Running() then
         self.controlRecvCo = nil
         if next(self.pendingWaitCo) ~= nil then
             --激活队列首部的协程
             self.controlRecvCo = self.pendingWaitCo[1]
             table.remove(self.pendingWaitCo, 1)
-            coroutine_wakeup(self.controlRecvCo)
+            self.scheduler:ForceWakeup(self.controlRecvCo)
         end
     end
 end
 
 function TcpSession:recvLock()
-    local current = coroutine_running()
+    local current = self.scheduler:Running()
 
     if self.controlRecvCo ~= nil and self.controlRecvCo ~= current then
         --等待获取控制权
         table.insert(self.pendingWaitCo, current)
 
         while true do    
-            coroutine_sleep(current, timeout)
+            self.scheduler:Sleep(current, timeout)
             if self.controlRecvCo == current then
                 break
             end
@@ -108,10 +110,10 @@ function TcpSession:receive(len, timeout)
 	end
 
     if string.len(self.cacheRecv) < len then
-        self.recvCo = coroutine_running()
+        self.recvCo = self.scheduler:Running()
         self.isWaitLen = true
         self.waitLen = len
-        coroutine_sleep(self.recvCo, timeout)
+        self.scheduler:Sleep(self.recvCo, timeout)
         self.recvCo = nil
     end
 
@@ -144,10 +146,10 @@ function TcpSession:receiveUntil(str, timeout)
 	
     local s, e = string.find(self.cacheRecv, str)
     if s == nil then
-        self.recvCo = coroutine_running()
+        self.recvCo = self.scheduler:Running()
         self.isWaitLen = false
         self.waitStr = str
-        coroutine_sleep(self.recvCo, timeout)
+        self.scheduler:Sleep(self.recvCo, timeout)
         self.recvCo = nil
         s, e = string.find(self.cacheRecv, str)
     end
@@ -167,15 +169,15 @@ end
 
 function TcpSession:wakeupRecv()
     if self.recvCo ~= nil then
-        coroutine_wakeup(self.recvCo)
+        self.scheduler:ForceWakeup(self.recvCo)
         self.recvCo = nil
     end
 end
 
 function TcpSession:send(data)
-    CoreDD:sendToTcpSession(self.serviceID, self.socketID, data, string.len(data))
+    self.joynet:sendToTcpSession(self.serviceID, self.socketID, data, string.len(data))
 end
 
 return {
-    New = function () return TcpSessionNew(TcpSession) end
+    New = function (joynet, scheduler) return TcpSessionNew(TcpSession, joynet, scheduler) end
 }

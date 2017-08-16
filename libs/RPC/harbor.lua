@@ -8,8 +8,6 @@ local REQUEST = RPCDefine.REQUEST
 local RESPONSE = RPCDefine.RESPONSE
 local POSTMSG = RPCDefine.POSTMSG
 
-local harborTcpService = nil
-
 --harbor服务,用于接收其他节点上的服务向此节点发起RPC操作
 
 local function recvPB(session, len)
@@ -67,26 +65,26 @@ local function harborSessionRecvThread(session)
     end
 end
 
-local function harborAcceptThread(tcpService)
+local function harborAcceptThread(scheduler, harborTcpService)
     while true do
         local session = harborTcpService:accept()
         if session ~= nil then
-            coroutine_start(function ()
+            scheduler:Start(function ()
                 harborSessionRecvThread(session)
             end)
         end
     end
 end
 
-local function OpenHarbor(port)
+local function OpenHarbor(port, joynet, scheduler)
     local harborPort = HarborAddress.GetHarborPort()
     if harborPort == nil and port ~= nil then
         HarborAddress.SetHarborPort(port)
-        harborTcpService = TcpService:New()
+        local harborTcpService = TcpService:New(joynet, scheduler)
         harborTcpService:listen("0.0.0.0", port)
         
-        coroutine_start(function()
-            harborAcceptThread(harborTcpService)
+        scheduler:Start(function()
+            harborAcceptThread(scheduler, harborTcpService)
         end)
     end
 end

@@ -9,6 +9,8 @@ local REQUEST = RPCDefine.REQUEST
 local RESPONSE = RPCDefine.RESPONSE
 local POSTMSG = RPCDefine.POSTMSG
 
+local joynet = nil
+local scheduler = nil
 local harborOutTcpService = nil
 local harborOutMgr = {}
 local harborOutMgrGuard = {}
@@ -53,7 +55,7 @@ local function _RPCCall(remoteIP, remotePort, remoteServiceID, remoteServiceName
         end
     else
         if harborOutTcpService == nil then
-            harborOutTcpService = TcpService:New()
+            harborOutTcpService = TcpService.New(joynet, scheduler)
             harborOutTcpService:createService()
         end
         local remoteAddr = remoteIP..remotePort
@@ -66,7 +68,7 @@ local function _RPCCall(remoteIP, remotePort, remoteServiceID, remoteServiceName
         if session == nil then
             local lock = harborOutMgrGuard[remoteAddr]
             if lock == nil then
-                lock = Lock.New()
+                lock = Lock.New(scheduler)
                 harborOutMgrGuard[remoteAddr] = lock
             end
             
@@ -142,8 +144,11 @@ local function _RPCCall(remoteIP, remotePort, remoteServiceID, remoteServiceName
 end
 
 return {
-    New = function () return service:new() end,
-    
+    Setup = function(_joynet, _scheduler)
+        joynet = _joynet
+        scheduler = _scheduler
+    end,
+
     RPCCall = function (remoteIP, remotePort, remoteServiceID, remoteServiceName, _type, data, _callerWaitReqID, callerService)
         return _RPCCall(remoteIP, remotePort, remoteServiceID, remoteServiceName, _type, data, nil, _callerWaitReqID, callerService)
     end,

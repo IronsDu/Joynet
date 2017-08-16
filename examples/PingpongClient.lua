@@ -1,18 +1,21 @@
 package.path = "./src/?.lua;./libs/?.lua;"
 require("Joynet")
+
 local TcpService = require "TcpService"
 local AcyncConnect = require "Connect"
+local Scheduler = require "Scheduler"
+local joynet = JoynetCore()
+local scheduler = Scheduler.New(joynet)
 
 local totalRecvNum = 0
 
 function userMain()
-
     --开启10个客户端
-    local clientService = TcpService:New()
+    local clientService = TcpService.New(joynet, scheduler)
     clientService:createService()
         
     for i=1,100 do
-        coroutine_start(function ()
+        scheduler:Start(function ()
             local session = clientService:connect("127.0.0.1", 9999, 5000)
             if session ~= nil then
                 local str = "hello"
@@ -39,21 +42,21 @@ function userMain()
         end)
     end
 
-    coroutine_start(function ()
+    scheduler:Start(function ()
             while true do
-                coroutine_sleep(coroutine_running(), 1000)
+                scheduler:Sleep(scheduler:Running(), 1000)
                 print("total recv :"..totalRecvNum.."/s")
                 totalRecvNum = 0
             end
         end)
 end
 
-coroutine_start(function ()
+scheduler:Start(function ()
     userMain()
 end)
 
 while true
 do
-    CoreDD:loop()
-    coroutine_schedule()
+    joynet:loop()
+    scheduler:Schedule()
 end

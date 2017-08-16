@@ -3,9 +3,12 @@ require("Joynet")
 local TcpService = require "TcpService"
 local AcyncConnect = require "Connect"
 local WebSocket = require "WebSocket"
+local Scheduler = require "Scheduler"
+local joynet = JoynetCore()
+local scheduler = Scheduler.New(joynet)
 
 function userMain()
-	local clientService = TcpService:New()
+	local clientService = TcpService.New(joynet, scheduler)
     clientService:createService()
 	local ws = WebSocket:New()
 	ws:setSession(clientService:connect("127.0.0.1", 8080, 10000, false))
@@ -14,12 +17,12 @@ function userMain()
 	print(ws:readFrame())
 end
 
-coroutine_start(function ()
+scheduler:Start(function ()
     userMain()
 end)
 
 while true
 do
-    CoreDD:loop()
-    coroutine_schedule()
+    joynet:loop()
+    scheduler:Scheduler()
 end

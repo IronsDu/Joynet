@@ -2,9 +2,9 @@ require "Scheduler"
 local AsyncConnect = require "Connect"
 local TcpSession = require "TcpSession"
 
-CoreDD = JoynetCore()
 local __TcpServiceList = {}
 
+--TODO::像core设置回调
 function __on_enter__(serviceID, socketID)
     __TcpServiceList[serviceID].entercallback(serviceID, socketID)
 end
@@ -24,11 +24,13 @@ end
 local TcpService = {
 }
 
-local function TcpServiceNew(p)
+local function TcpServiceNew(p, joynet, scheduler)
     local o = {}
     setmetatable(o, p)
     p.__index = p
     
+    o.joynet = joynet
+    o.scheduler = scheduler
     o.serviceID = -1
     o.acceptSessions = {}
     o.sessions = {}
@@ -51,8 +53,8 @@ function TcpService:createService()
     if self.serviceID ~= -1 then
         return
     end
-
-    local serviceID = CoreDD:createTCPService()
+    
+    local serviceID = self.joynet:createTCPService()
     self.serviceID = serviceID
     __TcpServiceList[serviceID] = self
 
@@ -74,15 +76,15 @@ function TcpService:createService()
     self.connected = function (serviceID, socketID, uid)
         local waitCo = self.connectedCo[uid]
         if waitCo ~= nil then
-            local session = TcpSession:New()
+            local session = TcpSession.New(self.joynet, self.scheduler)
             session:init(serviceID, socketID)
 
             self.connectedSessions[uid] = session
             self.sessions[socketID] = session
             self.connectedCo[uid] = nil
-            coroutine_wakeup(waitCo)
+            self.scheduler:ForceWakeup(waitCo)
         else
-            CoreDD:closeTcpSession(serviceID, socketID)
+            self.joynet:closeTcpSession(serviceID, socketID)
         end
     end
 end
@@ -90,10 +92,10 @@ end
 function TcpService:listen(ip, port)
     self:createService()
     if self.entercallback  == nil then
-        CoreDD:listen(self.serviceID, ip, port)    --开启监听服务
+        self.joynet:listen(self.serviceID, ip, port)    --开启监听服务
 
         self.entercallback = function (serviceID, socketID)
-            local session = TcpSession:New()
+            local session = TcpSession.New(self.joynet, self.scheduler)
             session:init(serviceID, socketID)
 
             table.insert(self.acceptSessions, session)
@@ -108,23 +110,23 @@ function TcpService:connect(ip, port, timeout, useOpenSSL)
         useOpenSSL = false
     end
     
-    local uid = AsyncConnect.AsyncConnect(ip, port, timeout, function (fd, uid)
+    local uid = AsyncConnect.AsyncConnect(self.joynet, ip, port, timeout, function (fd, uid)
         local isFailed = fd == -1
         if not isFailed then
-            isFailed = not CoreDD:addSessionToService(self.serviceID, fd, uid, useOpenSSL)
+            isFailed = not self.joynet:addSessionToService(self.serviceID, fd, uid, useOpenSSL)
         end
 
         if isFailed then
             local waitCo = self.connectedCo[uid]
             if waitCo ~= nil then
                 self.connectedCo[uid] = nil
-                coroutine_wakeup(waitCo)
+                self.scheduler:ForceWakeup(waitCo)
             end
         end
     end)
 
-    self.connectedCo[uid] = coroutine_running()
-    coroutine_sleep(coroutine_running(), timeout)
+    self.connectedCo[uid] = self.scheduler:Running()
+    self.scheduler:Sleep(self.scheduler:Running(), timeout)
     --寻找uid对应的session
     local session = self.connectedSessions[uid]
     self.connectedSessions[uid] = nil
@@ -141,9 +143,9 @@ function TcpService:accept(timeout)
     local newClient = nil
     local hasData = false
 
-    self.acceptCo = coroutine_running()
+    self.acceptCo = self.scheduler:Running()
     if next(self.acceptSessions) == nil then
-        coroutine_sleep(self.acceptCo, timeout)
+        self.scheduler:Sleep(self.acceptCo, timeout)
         hasData = next(self.acceptSessions) ~= nil
     else
         hasData = true
@@ -161,11 +163,11 @@ end
 
 function TcpService:wakeupAccept()
     if self.acceptCo ~= nil then
-        coroutine_wakeup(self.acceptCo)
+        self.scheduler:ForceWakeup(self.acceptCo)
         self.acceptCo = nil
     end
 end
 
 return {
-    New = function () return TcpServiceNew(TcpService) end
+    New = function (joynet, scheduler) return TcpServiceNew(TcpService, joynet, scheduler) end
 }

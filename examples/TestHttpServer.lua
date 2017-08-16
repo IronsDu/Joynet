@@ -2,6 +2,10 @@ package.path = "./src/?.lua;./libs/?.lua;"
 require("Joynet")
 local TcpService = require "TcpService"
 
+local Scheduler = require "Scheduler"
+local joynet = JoynetCore()
+local scheduler = Scheduler.New(joynet)
+
 --HTTP处理器
 local httpHandlers = {}
 
@@ -123,15 +127,15 @@ end
 
 function startHttpService(port)
     --开启http服务器
-    local serverService = TcpService:New()
-    serverService:listen("0.0.0.0", port)
+    local serverService = TcpService:New(joynet, scheduler)
+    serverService.listen("0.0.0.0", port)
     InitHttpRequestHandle()
 
-    coroutine_start(function()
+    scheduler:Start(function()
         while true do
             local session = serverService:accept()
             if session ~= nil then
-                coroutine_start(function ()
+                scheduler:Start(function ()
 
                     local request = {
                         parms = {},
@@ -224,7 +228,7 @@ function startHttpService(port)
     end)
 end
 
-coroutine_start(function ()
+scheduler:Start(function ()
     startHttpService(80)
 end)
 
@@ -272,6 +276,6 @@ end
 --主循环
 while true
 do
-    CoreDD:loop()
-    coroutine_schedule()
+    joynet:loop()
+    scheduler:Scheduler()
 end

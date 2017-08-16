@@ -19,10 +19,10 @@ local serviceTableOfID = {}
 
 local service = {}
 
-function service:new()
+local function serviceNew(p, scheduler)
     local o = {}
-    self.__index = self      
-    setmetatable(o,self)
+    setmetatable(o, p)
+    p.__index = p
     
     nextServiceIncID = nextServiceIncID + 1
     
@@ -37,18 +37,19 @@ function service:new()
     o.responseBlock = Queue.New()
     
     o.nextRequestID = 0
-    o.rpcCallGuard = Lock.New()
+    o.rpcCallGuard = Lock.New(scheduler)
+    o.scheduler = scheduler
     
     RPCServiceMgr.AddServiceByID(o, o.serviceID)
   
-  return o
+    return o
 end
 
 function service:pushRequest(...)
     self.requestChan:Push({...})
     local coObject = self.requestBlock:Pop()  
     if coObject then
-        coroutine_wakeup(coObject)
+        self.scheduler:ForceWakeup(coObject)
     end
 end
 
@@ -57,7 +58,7 @@ function service:pushResponse(...)
     self.responseChan:Push({...})
     local coObject = self.responseBlock:Pop()  
     if coObject then
-        coroutine_wakeup(coObject)
+        self.scheduler:ForceWakeup(coObject)
     end
 end
 
@@ -76,9 +77,9 @@ local function serviceRecvRequest(self, timeout)
     
     local msg = self.requestChan:Pop()
     if not msg then
-        local coObject = coroutine_running()
+        local coObject = self.scheduler:Running()
         self.requestBlock:Push(coObject)
-        coroutine_sleep(coObject, timeout)
+        self.scheduler:Sleep(coObject, timeout)
         msg = self.requestChan:Pop()
         if msg == nil and self.requestBlock:Front() == coObject then
             self.requestBlock:Pop()
@@ -99,9 +100,9 @@ local function serviceRecvResponse(self, timeout)
     
     local msg = self.responseChan:Pop()
     if not msg then
-        local coObject = coroutine_running()
+        local coObject = self.scheduler:Running()
         self.responseBlock:Push(coObject)
-        coroutine_sleep(coObject, timeout)
+        self.scheduler:Sleep(coObject, timeout)
         msg = self.responseChan:Pop()
         if msg == nil and self.responseBlock:Front() == coObject then
             self.responseBlock:Pop()
@@ -152,5 +153,5 @@ function service:setName(name)
 end
 
 return {
-    New = function () return service:new() end,
+    New = function(scheduler) return serviceNew(service, scheduler) end,
 }

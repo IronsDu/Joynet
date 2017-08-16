@@ -3,12 +3,15 @@ require "Scheduler"
 
 local channel = {}
 
-function channel:new()
+function channelNew(p, scheduler)
     local o = {}
-    self.__index = self      
-    setmetatable(o,self)
+    p.__index = p      
+    setmetatable(o, p)
+
     o.chan = LinkQue.New()
     o.block = LinkQue.New()
+    o.scheduler = scheduler
+    
     return o
 end
 
@@ -16,7 +19,7 @@ function channel:Send(...)
     self.chan:Push({...})
     local coObject = self.block:Pop()  
     if coObject then
-        coroutine_wakeup(coObject)
+        scheduler:ForceWakeup(coObject)
     end
 end
 
@@ -24,9 +27,9 @@ function channel:Recv()
     while true do
         local msg = self.chan:Pop()
         if not msg then
-            local coObject = coroutine_running()
+            local coObject = scheduler:Running()
             self.block:Push(coObject)
-            coroutine_sleep(coObject)
+            scheduler:Sleep(coObject)
         else
             return table.unpack(msg)
         end
@@ -34,5 +37,5 @@ function channel:Recv()
 end
 
 return {
-    New = function () return channel:new() end
+    New = function (scheduler) return channelNew(channel, scheduler) end
 }

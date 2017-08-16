@@ -5,6 +5,9 @@ local TcpService = require "TcpService"
 local HttpClient = require "HttpClient"
 local Lock = require "lock"
 local Cond = require "cond"
+local Scheduler = require "Scheduler"
+local joynet = JoynetCore()
+local scheduler = Scheduler.New(joynet)
 
 local picTypes = {"png", "jpg", "jpeg"}
 
@@ -54,8 +57,8 @@ local function urlEnCode(w)
 end
 
 local DownloadingNum = 0
-local downloadGuard = Lock.New()
-local downloadCond = Cond.New()
+local downloadGuard = Lock.New(scheduler)
+local downloadCond = Cond.New(scheduler)
 
 local function DownloadConcurrentControl(clientService, pic_url, dirname, qoffset)
     downloadGuard:Lock()
@@ -69,7 +72,7 @@ local function DownloadConcurrentControl(clientService, pic_url, dirname, qoffse
     DownloadingNum = DownloadingNum + 1
     downloadGuard:Unlock()
     
-    coroutine_start(function ()
+    scheduler:Start(function ()
         requestPic(clientService, pic_url, dirname, qoffset)
         
         downloadGuard:Lock()
@@ -157,10 +160,10 @@ end
 local isAllCompleted = false
 
 function userMain()
-    local clientService = TcpService:New()
+    local clientService = TcpService.New(joynet, scheduler)
     clientService:createService()
 
-    coroutine_start(function()
+    scheduler:Start(function()
         -- 访问知乎搜索页面,搜索配置的关键字的相关问题
         for k,v in pairs(ZhihuConfig.querys) do
             for i=1,v.count do
@@ -191,7 +194,7 @@ function userMain()
         else
             print("will end, sleep wait end")
             while true do
-                coroutine_sleep(coroutine_running(), 1000)
+                scheduler:Sleep(scheduler:Running(), 1000)
                 if DownloadingNum == 0 then
                     isAllCompleted = true
                     break
@@ -200,10 +203,10 @@ function userMain()
         end
     end)
 
-    coroutine_start(function ()
+    scheduler:Start(function ()
         local allStartTime = CoreDD:getNowUnixTime()
         while true do
-            coroutine_sleep(coroutine_running(), 1000)
+            scheduler:Sleep(scheduler:Running(), 1000)
             print("Current Completed Pic Num : "..totalPicNum.." cost ".. (CoreDD:getNowUnixTime()-allStartTime).." ms")
             print("Current requested pic num: "..requestedPicNum)
             if isAllCompleted then
@@ -214,14 +217,14 @@ function userMain()
     end)
 end
 
-coroutine_start(function ()
+scheduler:Start(function ()
     userMain()
 end)
 
 while true
 do
-    CoreDD:loop()
-    coroutine_schedule()
+    joynet:loop()
+    scheduler:Scheduler()
     
     if isAllCompleted then
         print("all completed, will break end")
