@@ -9,11 +9,11 @@ local CO_STATUS_RUNNING = 6 --运行中
 
 local scheduler =
 {
-    
 }
 
 local function SchedulerNew(p, joynet)
     local o = {}
+
     setmetatable(o, p)
     p.__index = p
     
@@ -41,22 +41,26 @@ end
 
 --添加到激活列表中
 function scheduler:Add2Active(coObj)
-    if coObj.status == CO_STATUS_NONE then
-        coObj.status = CO_STATUS_ACTIVED
-        self.process[self.nextPid] = coObj
-        self.nextPid = self.nextPid + 1
+    if coObj.status ~= CO_STATUS_NONE then
+        return
     end
+
+    coObj.status = CO_STATUS_ACTIVED
+    self.process[self.nextPid] = coObj
+    self.nextPid = self.nextPid + 1
 end
 
 --取消sleep
 function scheduler:CancelSleep(coObj)
-    if coObj.status == CO_STATUS_SLEEP then
-        if coObj.sleepID ~= nil then
-            self.joynet:removeTimer(coObj.sleepID)
-        end
-        
-        coObj.status = CO_STATUS_NONE
+    if coObj.status ~= CO_STATUS_SLEEP then
+        return
     end
+
+    if coObj.sleepID ~= nil then
+        self.joynet:removeTimer(coObj.sleepID)
+    end
+        
+    coObj.status = CO_STATUS_NONE
 end
 
 local function __scheduler_timer_callback(scheduler, sleepCo)
@@ -75,29 +79,33 @@ function scheduler:Sleep(coObj,ms)
         error("sc not equal self")
     end
 
-    if coObj.status == CO_STATUS_RUNNING then
-        if ms ~= nil then
-            local id = self.joynet:startLuaTimer(ms, function()
-                    __scheduler_timer_callback(self, coObj)
-                end)
-            coObj.sleepID = id
-        end
-        
-        coObj.status = CO_STATUS_SLEEP
-        coroutine.yield(coObj.co)
+    if coObj.status ~= CO_STATUS_RUNNING then
+        return
     end
+
+    if ms ~= nil then
+        local id = self.joynet:startLuaTimer(ms, function()
+                 __scheduler_timer_callback(self, coObj)
+            end)
+        coObj.sleepID = id
+    end
+        
+    coObj.status = CO_STATUS_SLEEP
+    coroutine.yield(coObj.co)
 end
 
 --coroutine_yield
 --暂时释放执行权
 function scheduler:Yield(coObj)
-    if coObj.status == CO_STATUS_RUNNING then
-        coObj.status = CO_STATUS_ACTIVED
-        --继续放入激活队列
-        self.process[self.nextPid] = coObj
-        self.nextPid = self.nextPid + 1
-        coroutine.yield(coObj.co)
+    if coObj.status ~= CO_STATUS_RUNNING then
+        return
     end
+
+    coObj.status = CO_STATUS_ACTIVED
+        --继续放入激活队列
+    self.process[self.nextPid] = coObj
+    self.nextPid = self.nextPid + 1
+    coroutine.yield(coObj.co)
 end
 
 --coroutine_schedule

@@ -47,39 +47,45 @@ end
 
 function TcpSession:parseData(data, len)
     self.cacheRecv = self.cacheRecv..data
-    if self.recvCo ~= nil then
-        local mustWakeup = false
-        if self.isWaitLen then
-            mustWakeup = string.len(self.cacheRecv) >= self.waitLen
-        else
-            local s, e = string.find(self.cacheRecv, self.waitStr)
-            mustWakeup = s ~= nil
-        end
+    if self.recvCo == nil then
+        return len
+    end
 
-        if mustWakeup then
-            self:wakeupRecv()
-        end
+    local mustWakeup = false
+    if self.isWaitLen then
+        mustWakeup = string.len(self.cacheRecv) >= self.waitLen
+    else
+        local s, e = string.find(self.cacheRecv, self.waitStr)
+        mustWakeup = s ~= nil
+    end
+
+    if mustWakeup then
+        self:wakeupRecv()
     end
     
     return len
 end
 
 function TcpSession:releaseRecvLock()
-    if self.controlRecvCo == self.scheduler:Running() then
-        self.controlRecvCo = nil
-        if next(self.pendingWaitCo) ~= nil then
-            --激活队列首部的协程
-            self.controlRecvCo = self.pendingWaitCo[1]
-            table.remove(self.pendingWaitCo, 1)
-            self.scheduler:ForceWakeup(self.controlRecvCo)
-        end
+    if self.controlRecvCo ~= self.scheduler:Running() then
+        return
+    end
+
+    self.controlRecvCo = nil
+    if next(self.pendingWaitCo) ~= nil then
+        --激活队列首部的协程
+        self.controlRecvCo = self.pendingWaitCo[1]
+        table.remove(self.pendingWaitCo, 1)
+        self.scheduler:ForceWakeup(self.controlRecvCo)
     end
 end
 
 function TcpSession:recvLock()
     local current = self.scheduler:Running()
 
-    if self.controlRecvCo ~= nil and self.controlRecvCo ~= current then
+    if self.controlRecvCo == nil or self.controlRecvCo == current then
+        self.controlRecvCo = current
+    else
         --等待获取控制权
         table.insert(self.pendingWaitCo, current)
 
@@ -89,8 +95,6 @@ function TcpSession:recvLock()
                 break
             end
         end
-    else
-        self.controlRecvCo = current
     end
 end
 

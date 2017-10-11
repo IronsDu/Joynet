@@ -4,6 +4,7 @@ local coObject =
 
 local function coObjectNew(p)
     local o = {}
+
     setmetatable(o, p)
     p.__index = p
     

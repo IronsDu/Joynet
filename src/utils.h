@@ -1,8 +1,9 @@
 #ifndef _JOYNET_UTILS_H
 #define _JOYNET_UTILS_H
 
-#include "NonCopyable.h"
-#include "WebSocketFormat.h"
+#include <chrono>
+#include <brynet/utils/NonCopyable.h>
+#include <brynet/net/http/WebSocketFormat.h>
 
 #ifdef USE_ZLIB
 #include "zlib.h"
@@ -24,7 +25,7 @@ namespace Joynet
         int64_t claim()
         {
             int64_t id = 0;
-            id |= (ox_getnowtime() / 1000 << 32);
+            id |= (std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()) << 32);
             id |= (mIncID++);
 
             return id;

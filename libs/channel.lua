@@ -26,13 +26,13 @@ end
 function channel:Recv()
     while true do
         local msg = self.chan:Pop()
-        if not msg then
-            local coObject = scheduler:Running()
-            self.block:Push(coObject)
-            scheduler:Sleep(coObject)
-        else
+        if msg ~= nil then
             return table.unpack(msg)
         end
+
+        local coObject = scheduler:Running()
+        self.block:Push(coObject)
+        scheduler:Sleep(coObject)
     end
 end
 

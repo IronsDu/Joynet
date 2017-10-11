@@ -5,6 +5,7 @@ local lock = {}
 
 function lockNew(p, scheduler)
     local o = {}
+
     p.__index = p      
     setmetatable(o,p)
 

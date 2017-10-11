@@ -4,23 +4,27 @@
 #include <string>
 #include <unordered_map>
 #include <cassert>
+#include <chrono>
+#include <thread>
 
-#include "systemlib.h"
-#include "SocketLibFunction.h"
-#include "ox_file.h"
+#include <brynet/net/SocketLibFunction.h>
+#include <brynet/utils/ox_file.h>
 
-#include "EventLoop.h"
-#include "DataSocket.h"
-#include "TCPService.h"
-#include "MsgQueue.h"
-#include "Connector.h"
+#include <brynet/net/EventLoop.h>
+#include <brynet/net/DataSocket.h>
+#include <brynet/net/TCPService.h>
+#include <brynet/net/ListenThread.h>
+#include <brynet/net/Connector.h>
+#include <brynet/timer/Timer.h>
+
+#include <brynet/utils/NonCopyable.h>
+#include <brynet/utils/md5calc.h>
+#include <brynet/utils/SHA1.h>
+#include <brynet/utils/base64.h>
+#include <brynet/net/http/WebSocketFormat.h>
 
 #include "lua_tinker.h"
-#include "NonCopyable.h"
-#include "md5calc.h"
-#include "SHA1.h"
-#include "base64.h"
-#include "http/WebSocketFormat.h"
+
 #include "utils.h"
 
 using namespace brynet;
@@ -35,17 +39,19 @@ struct LuaTcpService
     LuaTcpService()
     {
         mTcpService = TcpService::Create();
+        mListenThread = ListenThread::Create();
     }
 
     int                                             mServiceID;
     TcpService::PTR                                 mTcpService;
+    ListenThread::PTR                               mListenThread;
 };
 
-static int64_t monitorTime = ox_getnowtime();
+static auto monitorTime = std::chrono::system_clock::now();
 static void luaRuntimeCheck(lua_State *L, lua_Debug *ar)
 {
-    int64_t nowTime = ox_getnowtime();
-    if ((nowTime - monitorTime) >= 5000)
+    auto nowTime = std::chrono::system_clock::now();
+    if ((nowTime - monitorTime) >= std::chrono::milliseconds(10000))
     {
         /*TODO::callstack*/
         luaL_error(L, "%s", "while dead loop \n");
@@ -73,7 +79,8 @@ public:
     {
         for (auto& v : mServiceList)
         {
-            v.second->mTcpService->closeService();
+            v.second->mTcpService->stopWorkerThread();
+            v.second->mListenThread->closeListenThread();
         }
         mServiceList.clear();
 
@@ -85,11 +92,7 @@ public:
 
     void    createAsyncConnectorThread()
     {
-        mAsyncConnector->startThread([this](sock fd, const std::any& uid){
-            pushAsyncConnectorResult(fd, uid);
-        }, [this](const std::any& uid) {
-            pushAsyncConnectorResult(-1, uid);
-        });
+        mAsyncConnector->startThread();
     }
 
     void    pushAsyncConnectorResult(sock fd, const std::any& uid)
@@ -106,19 +109,20 @@ public:
 
     void    startMonitor()
     {
-        monitorTime = ox_getnowtime();
+        monitorTime = std::chrono::system_clock::now();
     }
 
     int64_t getNowUnixTime()
     {
-        return ox_getnowtime();
+        auto now = std::chrono::system_clock::now();
+        return std::chrono::system_clock::to_time_t(now);
     }
 
     int64_t startTimer(int delayMs, const std::string& callback)
     {
         auto id = mTimerIDCreator.claim();
 
-        auto timer = mTimerMgr->addTimer(delayMs, [=](){
+        auto timer = mTimerMgr->addTimer(std::chrono::milliseconds(delayMs), [=](){
             mTimerList.erase(id);
             lua_tinker::call<void>(L, callback.c_str(), id);
         });
@@ -132,7 +136,7 @@ public:
     {
         auto id = mTimerIDCreator.claim();
 
-        auto timer = mTimerMgr->addTimer(delayMs, [=](){
+        auto timer = mTimerMgr->addTimer(std::chrono::milliseconds(delayMs), [=](){
 
             mTimerList.erase(id);
 
@@ -176,8 +180,7 @@ public:
         auto it = mServiceList.find(serviceID);
         if (it != mServiceList.end())
         {
-            auto& service = (*it).second;
-            service->mTcpService->disConnect(socketID);
+            (*it).second->mTcpService->disConnect(socketID);
         }
     }
 
@@ -201,35 +204,42 @@ public:
 
     bool    addSessionToService(int serviceID, sock fd, int64_t uid, bool useSSL)
     {
-        auto ret = false;
-
         auto it = mServiceList.find(serviceID);
-        if (it != mServiceList.end())
+        if (it == mServiceList.end())
         {
-            ox_socket_nodelay(fd);
-            auto serviceID = (*it).second->mServiceID;
-            auto& service = (*it).second->mTcpService;
-            ret = service->addDataSocket(fd, [=](int64_t id, const std::string& ip){
-                mLogicLoop.pushAsyncProc([this, serviceID, id, uid]() {
-                    lua_tinker::call<void>(L, "__on_connected__", serviceID, id, uid);
-                });
-
-            }, service->getDisconnectCallback(), service->getDataCallback(), useSSL, 1024 * 1024, false);
+            return false;
         }
 
-        return ret;
+        ox_socket_nodelay(fd);
+
+        auto connectedCallback = [=](int64_t id, const std::string& ip) {
+            mLogicLoop.pushAsyncProc([this, serviceID, id, uid]() {
+                lua_tinker::call<void>(L, "__on_connected__", serviceID, id, uid);
+            });
+        };
+
+        return helpAddFD((*it).second, fd, connectedCallback);
     }
 
-    int64_t asyncConnect(const char* ip, int port, int timeout)
+    int64_t asyncConnect(const char* ip, int port, int timeoutMs)
     {
         auto id = mAsyncConnectIDCreator.claim();
-        mAsyncConnector->asyncConnect(ip, port, timeout, id);
+        mAsyncConnector->asyncConnect(ip, 
+            port, 
+            std::chrono::milliseconds(timeoutMs), 
+            [=](sock fd) {
+                pushAsyncConnectorResult(fd, id);
+            }, 
+            [=]() {
+                pushAsyncConnectorResult(-1, id);
+            });
         return id;
     }
 
     void    loop()
     {
-        mLogicLoop.loop(mTimerMgr->isEmpty() ? 100 : mTimerMgr->nearEndMs());
+        auto mill = std::chrono::duration_cast<std::chrono::milliseconds>(mTimerMgr->nearLeftTime());
+        mLogicLoop.loop(mTimerMgr->isEmpty() ? 100 : mill.count());
         mTimerMgr->schedule();
     }
 
@@ -241,38 +251,64 @@ public:
         luaTcpService->mServiceID = mNextServiceID;
         mServiceList[luaTcpService->mServiceID] = luaTcpService;
 
-        luaTcpService->mTcpService->startWorkerThread(ox_getcpunum());
-
-        luaTcpService->mTcpService->setEnterCallback([=](int64_t id, const std::string& ip){
-            mLogicLoop.pushAsyncProc([serviceID = luaTcpService->mServiceID, id, this]() {
-                lua_tinker::call<void>(L, "__on_enter__", serviceID, id);
-            });
-        });
-
-        luaTcpService->mTcpService->setDisconnectCallback([=](int64_t id){
-            mLogicLoop.pushAsyncProc([serviceID = luaTcpService->mServiceID, id, this]() {
-                lua_tinker::call<void>(L, "__on_close__", serviceID, id);
-            });
-        });
-
-        luaTcpService->mTcpService->setDataCallback([=](int64_t id, const char* buffer, size_t len){
-            mLogicLoop.pushAsyncProc([serviceID = luaTcpService->mServiceID, id, this, data = std::string(buffer, len)]() {
-                int consumeLen = lua_tinker::call<int>(L, "__on_data__", serviceID, id, data, data.size());
-                assert(consumeLen >= 0);
-            });
-            return len;
-        });
+        luaTcpService->mTcpService->startWorkerThread(std::thread::hardware_concurrency());
 
         return luaTcpService->mServiceID;
     }
 
+    //TODO::ssl
     void    listen(int serviceID, const char* ip, int port)
     {
         auto it = mServiceList.find(serviceID);
-        if (it != mServiceList.end())
+        if (it == mServiceList.end())
         {
-            (*it).second->mTcpService->startListen(false, ip, port, 1024 * 1024, nullptr, nullptr);
+            return;
         }
+
+        auto initHandle = [=, luaTcpService = (*it).second](sock fd) {
+            auto enterHandle = [=](int64_t id, const std::string& ip) {
+                mLogicLoop.pushAsyncProc([serviceID = luaTcpService->mServiceID, id, this]() {
+                    lua_tinker::call<void>(L, "__on_enter__", serviceID, id);
+                });
+            };
+
+            helpAddFD(luaTcpService, fd, enterHandle);
+        };
+
+        (*it).second->mListenThread->startListen(false,
+            ip,
+            port,
+            initHandle);
+    }
+
+private:
+    bool helpAddFD(const LuaTcpService::PTR& luaTcpService, 
+        sock fd, 
+        std::function<void (int64_t id, const std::string& ip)> callback)
+    {
+        auto disConnectHanale = [=](int64_t id) {
+            mLogicLoop.pushAsyncProc([serviceID = luaTcpService->mServiceID, id, this]() {
+                lua_tinker::call<void>(L, "__on_close__", serviceID, id);
+            });
+        };
+
+        auto datahandle = [=](int64_t id, const char* buffer, size_t len) {
+            mLogicLoop.pushAsyncProc([serviceID = luaTcpService->mServiceID, id, this, data = std::string(buffer, len)]() {
+                int consumeLen = lua_tinker::call<int>(L, "__on_data__", serviceID, id, data, data.size());
+                assert(consumeLen >= 0);
+            });
+
+            return len;
+        };
+
+        return luaTcpService->mTcpService->addDataSocket(fd,
+            nullptr,
+            callback,
+            disConnectHanale,
+            datahandle,
+            false,
+            1024 * 1024,
+            false);
     }
 
 private:

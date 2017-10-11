@@ -13,22 +13,22 @@ function Que:Push(v)
 end
 
 function Que:Front()
-    if #self.data > 0 then
-        return self.data[1]
-    else
+    if #self.data <= 0 then
         return nil
     end
+    
+    return self.data[1]
 end
 
 
 function Que:Pop()
-    if #self.data > 0 then
-        local r = self.data[1]
-        table.remove(self.data,1)
-        return r
-    else
+    if #self.data <= 0 then
         return nil
     end
+
+    local r = self.data[1]
+    table.remove(self.data,1)
+    return r
 end
 
 function Que:IsEmpty()

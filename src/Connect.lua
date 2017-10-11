@@ -4,10 +4,12 @@ local __connect__callback = {}
 --TODO::设置为joynet回掉
 function __on_async_connectd__(fd, uid)
     local callback = __connect__callback[uid]
-    if callback ~= nil then
-        __connect__callback[uid] = nil
-        callback(fd, uid)
+    if callback == nil then
+    	return
     end
+
+    __connect__callback[uid] = nil
+ 	callback(fd, uid)
 end
 
 local function asyncConnect(joynet, ip, port, timeout, callback)

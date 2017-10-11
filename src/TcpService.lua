@@ -91,17 +91,19 @@ end
 
 function TcpService:listen(ip, port)
     self:createService()
-    if self.entercallback  == nil then
-        self.joynet:listen(self.serviceID, ip, port)    --开启监听服务
+    if self.entercallback  ~= nil then
+        return
+    end
 
-        self.entercallback = function (serviceID, socketID)
-            local session = TcpSession.New(self.joynet, self.scheduler)
-            session:init(serviceID, socketID)
+    self.joynet:listen(self.serviceID, ip, port)    --开启监听服务
 
-            table.insert(self.acceptSessions, session)
-            self.sessions[socketID] = session
-            self:wakeupAccept()
-        end
+    self.entercallback = function (serviceID, socketID)
+        local session = TcpSession.New(self.joynet, self.scheduler)
+        session:init(serviceID, socketID)
+
+        table.insert(self.acceptSessions, session)
+        self.sessions[socketID] = session
+        self:wakeupAccept()
     end
 end
 
