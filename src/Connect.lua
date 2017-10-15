@@ -1,7 +1,7 @@
 local __connect__callback = {}
 
 --fd为-1表示失败
---TODO::设置为joynet回掉
+--TODO::设置为joynet回调
 function __on_async_connectd__(fd, uid)
     local callback = __connect__callback[uid]
     if callback == nil then

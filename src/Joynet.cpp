@@ -22,6 +22,7 @@
 #include <brynet/utils/SHA1.h>
 #include <brynet/utils/base64.h>
 #include <brynet/net/http/WebSocketFormat.h>
+#include <brynet/net/SSLHelper.h>
 
 #include "lua_tinker.h"
 
@@ -45,6 +46,7 @@ struct LuaTcpService
     int                                             mServiceID;
     TcpService::PTR                                 mTcpService;
     ListenThread::PTR                               mListenThread;
+    SSLHelper::PTR                                  mSSLHelper;
 };
 
 static auto monitorTime = std::chrono::system_clock::now();
@@ -202,7 +204,11 @@ public:
         }
     }
 
-    bool    addSessionToService(int serviceID, sock fd, int64_t uid, bool useSSL)
+    bool    addSessionToService(int serviceID, 
+        sock fd, 
+        int64_t uid, 
+        bool useSSL, 
+        bool isServerSideSocket)
     {
         auto it = mServiceList.find(serviceID);
         if (it == mServiceList.end())
@@ -218,7 +224,7 @@ public:
             });
         };
 
-        return helpAddFD((*it).second, fd, connectedCallback);
+        return helpAddFD((*it).second, fd, connectedCallback, useSSL, isServerSideSocket);
     }
 
     int64_t asyncConnect(const char* ip, int port, int timeoutMs)
@@ -256,8 +262,35 @@ public:
         return luaTcpService->mServiceID;
     }
 
-    //TODO::ssl
-    void    listen(int serviceID, const char* ip, int port)
+    bool    setupSSL(int serviceID,
+        const std::string& certificate,
+        const std::string& privatekey)
+    {
+        auto it = mServiceList.find(serviceID);
+        if (it == mServiceList.end())
+        {
+            return false;
+        }
+#ifndef USE_OPENSSL
+        return false;
+#else
+        if ((*it).second->mSSLHelper != nullptr)
+        {
+            return false;
+        }
+
+        auto sslHelper = SSLHelper::Create();
+        if (!sslHelper->initSSL(certificate, privatekey))
+        {
+            return false;
+        }
+
+        (*it).second->mSSLHelper = sslHelper;
+        return true;
+#endif
+    }
+
+    void    listen(int serviceID, const char* ip, int port, bool useSSL)
     {
         auto it = mServiceList.find(serviceID);
         if (it == mServiceList.end())
@@ -272,7 +305,7 @@ public:
                 });
             };
 
-            helpAddFD(luaTcpService, fd, enterHandle);
+            helpAddFD(luaTcpService, fd, enterHandle, useSSL, true);
         };
 
         (*it).second->mListenThread->startListen(false,
@@ -284,7 +317,9 @@ public:
 private:
     bool helpAddFD(const LuaTcpService::PTR& luaTcpService, 
         sock fd, 
-        std::function<void (int64_t id, const std::string& ip)> callback)
+        std::function<void (int64_t id, const std::string& ip)> callback,
+        bool useSSL,
+        bool isServerSideSocket)
     {
         auto disConnectHanale = [=](int64_t id) {
             mLogicLoop.pushAsyncProc([serviceID = luaTcpService->mServiceID, id, this]() {
@@ -293,8 +328,14 @@ private:
         };
 
         auto datahandle = [=](int64_t id, const char* buffer, size_t len) {
-            mLogicLoop.pushAsyncProc([serviceID = luaTcpService->mServiceID, id, this, data = std::string(buffer, len)]() {
-                int consumeLen = lua_tinker::call<int>(L, "__on_data__", serviceID, id, data, data.size());
+            mLogicLoop.pushAsyncProc([serviceID = luaTcpService->mServiceID, 
+                id, this, data = std::string(buffer, len)]() {
+                int consumeLen = lua_tinker::call<int>(L, 
+                    "__on_data__", 
+                    serviceID, 
+                    id, 
+                    data, 
+                    data.size());
                 assert(consumeLen >= 0);
             });
 
@@ -302,11 +343,11 @@ private:
         };
 
         return luaTcpService->mTcpService->addDataSocket(fd,
-            nullptr,
+            isServerSideSocket ? luaTcpService->mSSLHelper : nullptr,
+            useSSL,
             callback,
             disConnectHanale,
             datahandle,
-            false,
             1024 * 1024,
             false);
     }
@@ -369,6 +410,7 @@ __declspec(dllexport)
 
         lua_tinker::class_def<CoreDD>(L, "addSessionToService", &CoreDD::addSessionToService);
         lua_tinker::class_def<CoreDD>(L, "asyncConnect", &CoreDD::asyncConnect);
+        lua_tinker::class_def<CoreDD>(L, "setupSSL", &CoreDD::setupSSL);
 
         lua_tinker::def(L, "UtilsSha1", Joynet::luaSha1);
         lua_tinker::def(L, "UtilsMd5", Joynet::luaMd5);

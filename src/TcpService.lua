@@ -89,13 +89,21 @@ function TcpService:createService()
     end
 end
 
-function TcpService:listen(ip, port)
+function TcpService:setupSSL(certificate, privatekey)
+    return self.joynet:setupSSL(self.serviceID, certificate, privatekey)
+end
+
+function TcpService:listen(ip, port, useSSL)
+    if useSSL == nil then
+        useSSL = false
+    end
+
     self:createService()
     if self.entercallback  ~= nil then
         return
     end
 
-    self.joynet:listen(self.serviceID, ip, port)    --开启监听服务
+    self.joynet:listen(self.serviceID, ip, port, useSSL)    --开启监听服务
 
     self.entercallback = function (serviceID, socketID)
         local session = TcpSession.New(self.joynet, self.scheduler)
@@ -115,7 +123,7 @@ function TcpService:connect(ip, port, timeout, useOpenSSL)
     local uid = AsyncConnect.AsyncConnect(self.joynet, ip, port, timeout, function (fd, uid)
         local isFailed = fd == -1
         if not isFailed then
-            isFailed = not self.joynet:addSessionToService(self.serviceID, fd, uid, useOpenSSL)
+            isFailed = not self.joynet:addSessionToService(self.serviceID, fd, uid, useOpenSSL, false)
         end
 
         if isFailed then

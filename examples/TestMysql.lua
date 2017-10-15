@@ -12,8 +12,8 @@ local totalQueryNum = 0
 function userMain()
     local mysqlService = TcpService.New(joynet, scheduler)
     mysqlService:createService()
-	local mysql = MYSQL:New()
-	local isOK, err = mysql:connect(mysqlService, "192.168.2.200", 3306, 1000, "logindb", "trAdmin", "trmysql")
+    local mysql = MYSQL:New()
+    local isOK, err = mysql:connect(mysqlService, "192.168.2.200", 3306, 1000, "logindb", "trAdmin", "trmysql")
     for i=1, 8 do
         scheduler:Start(function ( ... )
             
@@ -23,7 +23,7 @@ function userMain()
             else
                 print("connect success")
             end
-			
+
             local res, err = mysql:query("update public.heros set name='asxs' where id = 1")
             if not res then
                 print("query failed, err :"..err)
@@ -34,10 +34,10 @@ function userMain()
                 if not res then
                     print("query failed, err :"..err)
                 else
-					print("query result")
+                    print("query result")
                     totalQueryNum = totalQueryNum + 1
                     for i,v in ipairs(res) do
-						print(string.format("data : %s\t%s",v.playerId, v.name))
+                        print(string.format("data : %s\t%s",v.playerId, v.name))
                     end
                 end
             end

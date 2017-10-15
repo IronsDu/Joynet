@@ -128,7 +128,7 @@ end
 function startHttpService(port)
     --开启http服务器
     local serverService = TcpService:New(joynet, scheduler)
-    serverService.listen("0.0.0.0", port)
+    serverService:listen("0.0.0.0", port)
     InitHttpRequestHandle()
 
     scheduler:Start(function()
