@@ -3,7 +3,7 @@ require "Scheduler"
 local LinkQue  = require "linkque"
 local cond = {}
 
-function condNew(p, scheduler)
+local function condNew(p, scheduler)
     local o = {}
     p.__index = p      
     setmetatable(o,p)
@@ -15,15 +15,15 @@ function condNew(p, scheduler)
 end
 
 function cond:wait()
-    local coObject = scheduler:Running()
+    local coObject = self.scheduler:Running()
     self.block:Push(coObject)
-    scheduler:Sleep(coObject)
+    self.scheduler:Sleep(coObject)
 end
 
 function cond:notifyOne()    
     local coObject = self.block:Pop()
     if coObject then
-        scheduler:ForceWakeup(coObject)
+        self.scheduler:ForceWakeup(coObject)
     end
 end
 

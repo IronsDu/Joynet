@@ -14,21 +14,24 @@ function userMain()
     redisService:createService()
 
     scheduler:Start(function ( ... )
-        local redis = Redis:New()
-        redis:connect(redisService, "192.168.12.128", 6979, 10000)
+        local redis = Redis.New(scheduler)
+        redis:connect(redisService, "192.168.1.41", 6379, 10000)
         redis:set("haha", "heihei")
 
         while true do
+
             local v, err = redis:get("haha")
             if v ~= nil then
                 totalRecvNum = totalRecvNum + 1
+            else
+                print(err)
             end
         end
     end)
 
     scheduler:Start(function ()
             while true do
-                scheduler:SLeep(scheduler:Running(), 1000)
+                scheduler:Sleep(scheduler:Running(), 1000)
                 print("total recv :"..totalRecvNum.."/s")
                 totalRecvNum = 0
             end
@@ -42,5 +45,5 @@ end)
 while true
 do
     joynet:loop()
-    scheduler:Scheduler()
+    scheduler:Schedule()
 end

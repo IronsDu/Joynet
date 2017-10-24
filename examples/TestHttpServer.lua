@@ -127,7 +127,7 @@ end
 
 function startHttpService(port)
     --开启http服务器
-    local serverService = TcpService:New(joynet, scheduler)
+    local serverService = TcpService.New(joynet, scheduler)
     serverService:listen("0.0.0.0", port)
     InitHttpRequestHandle()
 
@@ -277,5 +277,5 @@ end
 while true
 do
     joynet:loop()
-    scheduler:Scheduler()
+    scheduler:Schedule()
 end

@@ -12,8 +12,8 @@ local totalQueryNum = 0
 function userMain()
     local mysqlService = TcpService.New(joynet, scheduler)
     mysqlService:createService()
-    local mysql = MYSQL:New()
-    local isOK, err = mysql:connect(mysqlService, "192.168.2.200", 3306, 1000, "logindb", "trAdmin", "trmysql")
+    local mysql = MYSQL.New(scheduler)
+    local isOK, err = mysql:connect(mysqlService, "127.0.0.1", 3306, 1000, "test_database", "root", "password")
     for i=1, 8 do
         scheduler:Start(function ( ... )
             
@@ -24,20 +24,20 @@ function userMain()
                 print("connect success")
             end
 
-            local res, err = mysql:query("update public.heros set name='asxs' where id = 1")
+            local res, err = mysql:query("update test_table set test_cloumn ='asxs' where id = ' '")
             if not res then
                 print("query failed, err :"..err)
             end
 
             while true do
-                local res, err = mysql:query("select playerId,name,sex,level,exp,silver from playerinfo where playerId = '33ceb07bf4eeb3da587e268d663aba1a'")
+                local res, err = mysql:query("select * from test_table where id = ' '")
                 if not res then
                     print("query failed, err :"..err)
                 else
                     print("query result")
                     totalQueryNum = totalQueryNum + 1
                     for i,v in ipairs(res) do
-                        print(string.format("data : %s\t%s",v.playerId, v.name))
+                        print(string.format("data : %s\t%s",v.id, v.test_cloumn))
                     end
                 end
             end
@@ -60,5 +60,5 @@ end)
 while true
 do
     joynet:loop()
-    scheduler:Scheduler()
+    scheduler:Schedule()
 end

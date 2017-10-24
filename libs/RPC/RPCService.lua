@@ -1,3 +1,5 @@
+package.cpath = './libs/RPC/?.so;./libs/RPC/?.dll;'
+
 local Queue = require "queue"
 local protobuf = require "protobuf"
 local Lock = require "lock"

@@ -1,3 +1,5 @@
+package.cpath = './libs/RPC/?.so;./libs/RPC/?.dll;'
+
 local protobuf = require "protobuf"
 local TcpService = require "TcpService"
 local RPCServiceMgr = require "RPCServiceMgr"

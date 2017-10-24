@@ -11,7 +11,7 @@ local scheduler = Scheduler.New(joynet)
 local function userMain()
     --一个进程最多只能允许一个harbor
     --一个物理机允许多个进程,但各自的harbor监听不同的端口
-    harbor.OpenHarbor(8888)
+    harbor.OpenHarbor(8888, joynet, scheduler)
     RPCCall.Setup(joynet, scheduler)
     
     scheduler:Start(function()
@@ -63,5 +63,5 @@ end)
 while true
 do
     joynet:loop()
-    scheduler:Scheduler()
+    scheduler:Schedule()
 end

@@ -204,13 +204,13 @@ function userMain()
     end)
 
     scheduler:Start(function ()
-        local allStartTime = CoreDD:getNowUnixTime()
+        local allStartTime = joynet:getNowUnixTime()
         while true do
             scheduler:Sleep(scheduler:Running(), 1000)
-            print("Current Completed Pic Num : "..totalPicNum.." cost ".. (CoreDD:getNowUnixTime()-allStartTime).." ms")
+            print("Current Completed Pic Num : "..totalPicNum.." cost ".. (joynet:getNowUnixTime()-allStartTime).." ms")
             print("Current requested pic num: "..requestedPicNum)
             if isAllCompleted then
-                print("all pic completed, you can close process, all cost "..(CoreDD:getNowUnixTime()-allStartTime).." ms")
+                print("all pic completed, you can close process, all cost "..(joynet:getNowUnixTime()-allStartTime).." ms")
                 break
             end
         end
@@ -224,7 +224,7 @@ end)
 while true
 do
     joynet:loop()
-    scheduler:Scheduler()
+    scheduler:Schedule()
     
     if isAllCompleted then
         print("all completed, will break end")

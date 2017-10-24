@@ -3,7 +3,7 @@ require "Scheduler"
 local LinkQue  = require "linkque"
 local lock = {}
 
-function lockNew(p, scheduler)
+local function lockNew(p, scheduler)
     local o = {}
 
     p.__index = p      
@@ -18,14 +18,14 @@ function lockNew(p, scheduler)
 end
 
 function lock:Lock()
-    local coObject = scheduler:Running()
+    local coObject = self.scheduler:Running()
     assert(self.owner ~= coObject)
     
     if self.flag then
         self.block:Push(coObject)
         
         while self.flag do
-            scheduler:Sleep(coObject)
+            self.scheduler:Sleep(coObject)
         end
     end
     
@@ -35,14 +35,14 @@ end
 
 function lock:Unlock()
     assert(self.flag == true)
-    assert(self.owner == scheduler:Running())
+    assert(self.owner == self.scheduler:Running())
     
     self.flag = false
     self.owner = nil
     
     local coObject = self.block:Pop()
     if coObject then
-        scheduler:ForceWakeup(coObject)
+        self.scheduler:ForceWakeup(coObject)
     end
 end
 

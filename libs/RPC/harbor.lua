@@ -1,3 +1,5 @@
+package.cpath = './libs/RPC/?.so;./libs/RPC/?.dll;'
+
 local protobuf = require "protobuf"
 local TcpService = require "TcpService"
 local RPCServiceMgr = require "RPCServiceMgr"
@@ -80,7 +82,7 @@ local function OpenHarbor(port, joynet, scheduler)
     local harborPort = HarborAddress.GetHarborPort()
     if harborPort == nil and port ~= nil then
         HarborAddress.SetHarborPort(port)
-        local harborTcpService = TcpService:New(joynet, scheduler)
+        local harborTcpService = TcpService.New(joynet, scheduler)
         harborTcpService:listen("0.0.0.0", port)
         
         scheduler:Start(function()

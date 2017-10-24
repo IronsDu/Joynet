@@ -76,11 +76,12 @@ for i=1,#commands do
     end
 end
 
-local function RedisSessionNew(p)
+local function RedisSessionNew(p, scheduler)
     local o = {}
     setmetatable(o, p)
     p.__index = p
     
+    o.scheduler = scheduler
     o.tcpsession = nil
     o.pendingWaitPipelineCo = {}
     o.pipelineCo = nil
@@ -216,12 +217,12 @@ function RedisSession:hmset(hashname, ...)
 end
 
 function RedisSession:waitPipelineCo()
-    local current = coroutine_running()
+    local current = self.scheduler:Running()
     if self.pipelineCo ~= nil and self.pipelineCo ~= current then
         --等待其他协程的pipeline完成
         table.insert(self.pendingWaitPipelineCo, current)
         while true do
-            coroutine_sleep(current, 1000)
+            self.scheduler:Sleep(current, 1000)
             if self.pipelineCo == nil then
                 break
             end
@@ -230,11 +231,11 @@ function RedisSession:waitPipelineCo()
 end
 
 function RedisSession:releasePipelineLock()
-    if self.pipelineCo == coroutine_running() then
+    if self.pipelineCo == self.scheduler:Running() then
         self.pipelineCo = nil
         --唤醒所有等待的co
         for i,v in ipairs(self.pendingWaitPipelineCo) do
-            coroutine_wakeup(v)
+            self.scheduler:ForceWakeup(v)
         end
         self.pendingWaitPipelineCo = {}
     end
@@ -243,11 +244,11 @@ end
 function RedisSession:initPipeline()
     self:waitPipelineCo()
     self._pipeReqs = {}
-    self.pipelineCo = coroutine_running()
+    self.pipelineCo = self.scheduler:Running()
 end
 
 function RedisSession:cancelPipeline()
-    if self.pipelineCo == coroutine_running() then
+    if self.pipelineCo == self.scheduler:Running() then
         self._pipeReqs = nil
         self:releasePipelineLock()
     end
@@ -258,7 +259,7 @@ function RedisSession:commitPipeline()
         return nil , "not connection"
     end
 
-    if self.pipelineCo ~= coroutine_running() then
+    if self.pipelineCo ~= self.scheduler:Running() then
         return nil, "error"
     end
 
@@ -308,5 +309,5 @@ function RedisSession:commitPipeline()
 end
 
 return {
-    New = function () return RedisSessionNew(RedisSession) end
+    New = function (scheduler) return RedisSessionNew(RedisSession, scheduler) end
 }

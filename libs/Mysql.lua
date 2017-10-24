@@ -553,13 +553,13 @@ local function read_result(self)
 end
 
 function MysqlSession:query(query)
-    local current = coroutine_running()
+    local current = self.scheduler:Running()
     if self.queryControl ~= nil and self.queryControl ~= current then
         --同时只允许一个协程进行query,存在进行中的query时，其他协程需要等待
         table.insert(self.pendingQueryCo, current)
 
         while true do   
-            coroutine_sleep(current, 1000)
+            self.scheduler:Sleep(current, 1000)
             if self.queryControl == current then
                 break
             end
@@ -578,24 +578,25 @@ function MysqlSession:query(query)
         self.tcpsession = nil
     end
 
-    if self.queryControl == coroutine_running() then
+    if self.queryControl == self.scheduler:Running() then
         self.queryControl = nil
         if next(self.pendingQueryCo) ~= nil then
             --激活队列首部的协程
             self.queryControl = self.pendingQueryCo[1]
             table.remove(self.pendingQueryCo, 1)
-            coroutine_wakeup(self.queryControl)
+            self.scheduler:ForceWakeup(self.queryControl)
         end
     end
 
     return res, err
 end
 
-local function MysqlSessionNew(p)
+local function MysqlSessionNew(p, scheduler)
     local o = {}
     setmetatable(o, p)
     p.__index = p
-    
+
+    o.scheduler = scheduler
     o.tcpsession = nil
     o.state = STATE_NONE
     o.compact = false
@@ -606,5 +607,5 @@ local function MysqlSessionNew(p)
 end
 
 return {
-    New = function () return MysqlSessionNew(MysqlSession) end
+    New = function (scheduler) return MysqlSessionNew(MysqlSession, scheduler) end
 }

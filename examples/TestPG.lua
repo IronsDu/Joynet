@@ -15,7 +15,7 @@ function userMain()
 
     for i=1, 10 do
         scheduler:Start(function ( ... )
-            local pg = PG:New()
+            local pg = PG.New(scheduler)
             local isOK, err = pg:connect(pgService, "192.168.12.1", 5432, 1000, "postgres", "postgres", "19870323")
             if not isOK then
                 print("connect failed, err:"..err)
@@ -59,5 +59,5 @@ end)
 while true
 do
     joynet:loop()
-    coroutine_schedule()
+    scheduler:Schedule()
 end
