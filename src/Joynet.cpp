@@ -82,11 +82,11 @@ public:
         for (auto& v : mServiceList)
         {
             v.second->mTcpService->stopWorkerThread();
-            v.second->mListenThread->closeListenThread();
+            v.second->mListenThread->stopListen();
         }
         mServiceList.clear();
 
-        mAsyncConnector->destroy();
+        mAsyncConnector->stopWorkerThread();
 
         mTimerMgr->clear();
         mTimerList.clear();
@@ -94,19 +94,14 @@ public:
 
     void    createAsyncConnectorThread()
     {
-        mAsyncConnector->startThread();
+        mAsyncConnector->startWorkerThread();
     }
 
-    void    pushAsyncConnectorResult(sock fd, const std::any& uid)
+    void    pushAsyncConnectorResult(sock fd, const int64_t& uid)
     {
-        auto puid = std::any_cast<int64_t>(&uid);
-        assert(puid != nullptr);
-        if (puid != nullptr)
-        {
-            mLogicLoop.pushAsyncProc([fd, uid = *puid]() {
-                lua_tinker::call<void>(L, "__on_async_connectd__", fd, uid);
-            });
-        }
+        mLogicLoop.pushAsyncProc([fd, uid]() {
+            lua_tinker::call<void>(L, "__on_async_connectd__", fd, uid);
+        });
     }
 
     void    startMonitor()
@@ -182,7 +177,7 @@ public:
         auto it = mServiceList.find(serviceID);
         if (it != mServiceList.end())
         {
-            (*it).second->mTcpService->disConnect(socketID);
+            (*it).second->mTcpService->postDisConnect(socketID);
         }
     }
 
@@ -191,7 +186,7 @@ public:
         auto it = mServiceList.find(serviceID);
         if (it != mServiceList.end())
         {
-            (*it).second->mTcpService->shutdown(socketID);
+            (*it).second->mTcpService->postShutdown(socketID);
         }
     }
 
@@ -298,9 +293,11 @@ public:
             return;
         }
 
-        auto initHandle = [=, luaTcpService = (*it).second](sock fd) {
+        auto luaTcpService = (*it).second;
+        auto initHandle = [=](sock fd) {
             auto enterHandle = [=](int64_t id, const std::string& ip) {
-                mLogicLoop.pushAsyncProc([serviceID = luaTcpService->mServiceID, id, this]() {
+                auto serviceID = luaTcpService->mServiceID;
+                mLogicLoop.pushAsyncProc([serviceID, id, this]() {
                     lua_tinker::call<void>(L, "__on_enter__", serviceID, id);
                 });
             };
@@ -322,14 +319,17 @@ private:
         bool isServerSideSocket)
     {
         auto disConnectHanale = [=](int64_t id) {
-            mLogicLoop.pushAsyncProc([serviceID = luaTcpService->mServiceID, id, this]() {
+            auto serviceID = luaTcpService->mServiceID;
+            mLogicLoop.pushAsyncProc([serviceID, id, this]() {
                 lua_tinker::call<void>(L, "__on_close__", serviceID, id);
             });
         };
 
         auto datahandle = [=](int64_t id, const char* buffer, size_t len) {
-            mLogicLoop.pushAsyncProc([serviceID = luaTcpService->mServiceID, 
-                id, this, data = std::string(buffer, len)]() {
+            auto serviceID = luaTcpService->mServiceID;
+            auto data = std::string(buffer, len);
+            mLogicLoop.pushAsyncProc([serviceID,
+                id, this, data]() {
                 int consumeLen = lua_tinker::call<int>(L, 
                     "__on_data__", 
                     serviceID, 

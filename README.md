@@ -1,4 +1,7 @@
 # Joynet
+Windows : [![Build status](https://ci.appveyor.com/api/projects/status/yyqufbynahl326pe/branch/master?svg=true)](https://ci.appveyor.com/project/IronsDu/joynet/branch/master) Linux : [![Build Status](https://travis-ci.org/IronsDu/Joynet.svg?branch=master)](https://travis-ci.org/IronsDu/Joynet)
+
+
 ## 介绍
 
 high performance  network library for lua, based on https://github.com/IronsDu/accumulation-dev and `lua coroutine`.
