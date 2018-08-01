@@ -6,7 +6,7 @@
 #include <brynet/net/http/WebSocketFormat.h>
 
 #ifdef USE_ZLIB
-#include "zlib.h"
+#include <zlib.h>
 #endif
 
 namespace Joynet

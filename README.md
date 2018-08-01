@@ -14,7 +14,7 @@ Joynet 的网络底层使用多线程，但Lua (层面)是运行在单线程上�
 ## 构建
 使用 `git clone`迁出项目并进入项目根目录，并依次使用 `git submodule init`和`git submodule update` 下载依赖项.
 
-然后使用cmake进行构建Joynet动态库
+然后使用`cmake`和`vcpkg`安装`brynet`进行构建Joynet动态库
 
 ## 使用
 [`examples`](https://github.com/IronsDu/Joynet/tree/master/examples) 目录包含测试代码。
@@ -25,10 +25,6 @@ Joynet 的网络底层使用多线程，但Lua (层面)是运行在单线程上�
 使用此库也很简单,在你的Lua代码里使用`require("Joynet")`加载网络库,然后使用`CoreDD`对象的相关接口即可(具体参考[`examples`](https://github.com/IronsDu/Joynet/tree/master/examples)目录的各示例代码)
 
 当然，你必须先安装有Lua环境
-
-Windows下可以[下载](http://luabinaries.sourceforge.net/)二进制包,仅Windows下的Joynet需要链接3rdparty/lualib目录,当前版本是lua5.3,如果你使用的Lua虚拟机是lua5.1,那么你需要用Lua5.1的include和lib/dll替换luasrc目录的内容,然后再构建Joynet
-
-linux下可以[下载](http://www.lua.org/ftp/)Lua源码(然后使用make linus;make install安装即可)
 
 ## 关于协程
 协程是轻量级线程，所以多线程有的问题它也有，只是影响程度不同。

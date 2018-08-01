@@ -17,8 +17,8 @@ function __on_data__(serviceID, socketID, data, len)
     return __TcpServiceList[serviceID].datacallback(serviceID, socketID, data, len)
 end
 
-function __on_connected__(serviceID, socketID, uid)
-    __TcpServiceList[serviceID].connected(serviceID, socketID, uid)
+function __on_connected__(serviceID, socketID, uid, success)
+    __TcpServiceList[serviceID].connected(serviceID, socketID, uid, success)
 end
 
 local TcpService = {
@@ -73,17 +73,19 @@ function TcpService:createService()
         return session:parseData(data, len)
     end
 
-    self.connected = function (serviceID, socketID, uid)
+    self.connected = function (serviceID, socketID, uid, success)
         local waitCo = self.connectedCo[uid]
         if waitCo ~= nil then
-            local session = TcpSession.New(self.joynet, self.scheduler)
-            session:init(serviceID, socketID)
+            if success then
+                local session = TcpSession.New(self.joynet, self.scheduler)
+                session:init(serviceID, socketID)
 
-            self.connectedSessions[uid] = session
-            self.sessions[socketID] = session
+                self.connectedSessions[uid] = session
+                self.sessions[socketID] = session
+            end
             self.connectedCo[uid] = nil
             self.scheduler:ForceWakeup(waitCo)
-        else
+        elseif success then
             self.joynet:closeTcpSession(serviceID, socketID)
         end
     end
@@ -120,20 +122,7 @@ function TcpService:connect(ip, port, timeout, useOpenSSL)
         useOpenSSL = false
     end
     
-    local uid = AsyncConnect.AsyncConnect(self.joynet, ip, port, timeout, function (fd, uid)
-        local isFailed = fd == -1
-        if not isFailed then
-            isFailed = not self.joynet:addSessionToService(self.serviceID, fd, uid, useOpenSSL, false)
-        end
-
-        if isFailed then
-            local waitCo = self.connectedCo[uid]
-            if waitCo ~= nil then
-                self.connectedCo[uid] = nil
-                self.scheduler:ForceWakeup(waitCo)
-            end
-        end
-    end)
+    local uid = AsyncConnect.AsyncConnect(self.joynet, self.serviceID, ip, port, timeout, useOpenSSL)
 
     self.connectedCo[uid] = self.scheduler:Running()
     self.scheduler:Sleep(self.scheduler:Running(), timeout)
