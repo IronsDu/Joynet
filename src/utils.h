@@ -14,7 +14,7 @@ namespace Joynet
     using namespace brynet;
     using namespace brynet::net;
 
-    class IdCreator : public NonCopyable
+    class IdCreator : public brynet::utils::NonCopyable
     {
     public:
         IdCreator()
@@ -77,7 +77,7 @@ namespace Joynet
 
     static std::string UtilsWsHandshakeResponse(const std::string& sec)
     {
-        return WebSocketFormat::wsHandshake(sec);
+        return brynet::net::http::WebSocketFormat::wsHandshake(sec);
     }
 
 #ifdef USE_ZLIB
