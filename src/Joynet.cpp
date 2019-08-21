@@ -37,7 +37,7 @@ typedef int64_t SocketIDType;
 typedef int64_t TimerIDType;
 typedef int64_t AsyncConnectorUidType;
 
-class LuaTcpService
+class LuaTcpService final
 {
 public:
     typedef std::shared_ptr<LuaTcpService> PTR;
@@ -45,8 +45,7 @@ public:
     LuaTcpService(int serviceID)
         :
         mServiceID(serviceID),
-        mTcpService(TcpService::Create()),
-        mListenThread(ListenThread::Create())
+        mTcpService(TcpService::Create())
     {
     }
 
@@ -85,6 +84,11 @@ public:
         return mTcpService;
     }
 
+    void    setListenThread(ListenThread::Ptr listenThread)
+    {
+        mListenThread = listenThread;
+    }
+
     ListenThread::Ptr   getListenThread() const
     {
         return mListenThread;
@@ -108,7 +112,7 @@ public:
 private:
     const int                                           mServiceID;
     const TcpService::Ptr                               mTcpService;
-    const ListenThread::Ptr                             mListenThread;
+    ListenThread::Ptr                                   mListenThread;
 
     SSLHelper::Ptr                                      mSSLHelper;
     Joynet::IdCreator                                   mSocketIDCreator;
@@ -126,12 +130,11 @@ static void luaRuntimeCheck(lua_State *L, lua_Debug *ar)
     }
 }
 
-class CoreDD : public brynet::utils::NonCopyable
+class CoreDD final : public brynet::utils::NonCopyable
 {
 public:
     CoreDD()
     {
-        mTimerMgr = std::make_shared<brynet::timer::TimerMgr>();
         mNextServiceID = 0;
         mAsyncConnector = AsyncConnector::Create();
 
@@ -147,14 +150,17 @@ public:
     {
         for (auto& v : mServiceList)
         {
-            v.second->getTcpService()->stopWorkerThread();
-            v.second->getListenThread()->stopListen();
+            const auto& service = v.second;
+            service->getTcpService()->stopWorkerThread();
+            if (service->getListenThread())
+            {
+                service->getListenThread()->stopListen();
+            }
         }
         mServiceList.clear();
 
         mAsyncConnector->stopWorkerThread();
 
-        mTimerMgr->clear();
         mTimerList.clear();
     }
 
@@ -179,7 +185,7 @@ public:
         static_assert(std::is_same<TimerIDType, decltype(mTimerIDCreator.claim())>::value);
 
         auto id = mTimerIDCreator.claim();
-        auto timer = mTimerMgr->addTimer(std::chrono::milliseconds(delayMs), [=](){
+        auto timer = mLogicLoop.runAfter(std::chrono::milliseconds(delayMs), [=](){
             mTimerList.erase(id);
             lua_tinker::call<void>(L, callback.c_str(), id);
         });
@@ -193,7 +199,7 @@ public:
     {
         auto id = mTimerIDCreator.claim();
 
-        auto timer = mTimerMgr->addTimer(std::chrono::milliseconds(delayMs), [=](){
+        auto timer = mLogicLoop.runAfter(std::chrono::milliseconds(delayMs), [=](){
 
             mTimerList.erase(id);
 
@@ -274,30 +280,33 @@ public:
         }
     }
 
-    AsyncConnectorUidType asyncConnect(int serviceID, const char* ip, int port, int timeoutMs, bool useSSL)
+    AsyncConnectorUidType asyncConnect(int serviceID, 
+        const char* ip, 
+        int port, 
+        int timeoutMs, 
+        bool useSSL)
     {
         static_assert(std::is_same<AsyncConnectorUidType, decltype(mAsyncConnectIDCreator.claim())>::value);
 
         const auto uid = mAsyncConnectIDCreator.claim();
-        mAsyncConnector->asyncConnect(ip, 
-            port, 
-            std::chrono::milliseconds(timeoutMs), 
-            [=](TcpSocket::Ptr socket) {
-                addSessionToService(serviceID, std::move(socket), uid, useSSL, false);
-            }, 
-            [=]() {
-                mLogicLoop.pushAsyncFunctor([serviceID, uid]() {
-                    lua_tinker::call<void>(L, "__on_connected__", serviceID, -1, uid, false);
-                });
+        mAsyncConnector->asyncConnect({
+                AsyncConnector::ConnectOptions::WithAddr(ip, port),
+                AsyncConnector::ConnectOptions::WithTimeout(std::chrono::milliseconds(timeoutMs)),
+                AsyncConnector::ConnectOptions::WithCompletedCallback([=](TcpSocket::Ptr socket) {
+                    addSessionToService(serviceID, std::move(socket), uid, useSSL, false);
+                }),
+                AsyncConnector::ConnectOptions::WithFailedCallback([=]() {
+                    mLogicLoop.runAsyncFunctor([serviceID, uid]() {
+                        lua_tinker::call<void>(L, "__on_connected__", serviceID, -1, uid, false);
+                    });
+                }),
             });
         return uid;
     }
 
     void    loop()
     {
-        auto mill = std::chrono::duration_cast<std::chrono::milliseconds>(mTimerMgr->nearLeftTime());
-        mLogicLoop.loop(mTimerMgr->isEmpty() ? 100 : mill.count());
-        mTimerMgr->schedule();
+        mLogicLoop.loopCompareNearTimer(100);
     }
 
     int     createTCPService()
@@ -351,7 +360,7 @@ public:
 
         auto initHandle = [=](TcpSocket::Ptr socket) {
             auto enterHandle = [=](const TcpConnection::Ptr& tcpConnection) {
-                mLogicLoop.pushAsyncFunctor([=]() {
+                mLogicLoop.runAsyncFunctor([=]() {
                     auto socketID = brynet::net::cast<SocketIDType>(tcpConnection->getUD());
                     lua_tinker::call<void>(L, 
                         "__on_enter__", 
@@ -363,10 +372,9 @@ public:
             helpAddFD(service, std::move(socket), enterHandle, useSSL, true);
         };
 
-        service->getListenThread()->startListen(false,
-            ip,
-            port,
-            initHandle);
+        auto listenThread = brynet::net::ListenThread::Create(false, ip, port, initHandle);
+        listenThread->startListen();
+        service->setListenThread(listenThread);
     }
 
 private:
@@ -383,7 +391,7 @@ private:
         }
 
         auto connectedCallback = [=](const TcpConnection::Ptr& tcpConnection) {
-            mLogicLoop.pushAsyncFunctor([=]() {
+            mLogicLoop.runAsyncFunctor([=]() {
                 auto socketID = brynet::net::cast<SocketIDType>(tcpConnection->getUD());
                 lua_tinker::call<void>(L, 
                     "__on_connected__", 
@@ -406,7 +414,7 @@ private:
         socket->setNodelay();
 
         auto wrapperEnterCallback = [=](const TcpConnection::Ptr tcpConnection) {
-            mLogicLoop.pushAsyncFunctor([=]() {
+            mLogicLoop.runAsyncFunctor([=]() {
                 auto socketID = luaTcpService->makeNextSocketID();
                 luaTcpService->addTcpConnection(socketID, tcpConnection);
                 tcpConnection->setUD(socketID);
@@ -415,7 +423,7 @@ private:
             callback(tcpConnection);
 
             auto disConnectHanale = [=](const TcpConnection::Ptr tcpConnection) {
-                mLogicLoop.pushAsyncFunctor([=]() {
+                mLogicLoop.runAsyncFunctor([=]() {
                     auto socketID = brynet::net::cast<SocketIDType>(tcpConnection->getUD());
                     luaTcpService->removeTcpConnection(*socketID);
                     lua_tinker::call<void>(L, 
@@ -427,7 +435,7 @@ private:
 
             auto datahandle = [=](const char* buffer, size_t len) {
                 auto data = std::string(buffer, len);
-                mLogicLoop.pushAsyncFunctor([=]() {
+                mLogicLoop.runAsyncFunctor([=]() {
                     auto socketID = brynet::net::cast<SocketIDType>(tcpConnection->getUD());
                     int consumeLen = lua_tinker::call<int>(L,
                         "__on_data__",
@@ -462,7 +470,7 @@ private:
         return luaTcpService->getTcpService()->addTcpConnection(
             std::move(socket),
             sslOption,
-            TcpService::AddSocketOption::WithEnterCallback(wrapperEnterCallback),
+            TcpService::AddSocketOption::AddEnterCallback(wrapperEnterCallback),
             TcpService::AddSocketOption::WithMaxRecvBufferSize(1024 * 1024));
     }
 
@@ -480,7 +488,6 @@ private:
     EventLoop                                   mLogicLoop;
 
     Joynet::IdCreator                           mTimerIDCreator;
-    brynet::timer::TimerMgr::Ptr                mTimerMgr;
     std::unordered_map<TimerIDType, brynet::timer::Timer::WeakPtr> mTimerList;
 
     AsyncConnector::Ptr                         mAsyncConnector;
