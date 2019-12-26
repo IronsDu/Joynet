@@ -14,10 +14,10 @@ add_library(Joynet SHARED ${lua_tinker_src_list} ${PROJECT_SOURCE_DIR}/src/Joyne
 
 set_target_properties(Joynet PROPERTIES PREFIX "")
 if(WIN32)
-  target_link_libraries(Joynet brynet ws2_32 lua)
+  target_link_libraries(Joynet ws2_32 lua)
 elseif(UNIX)
   find_package(Threads REQUIRED)
-  target_link_libraries(Joynet brynet lua zlib Threads::Threads)
+  target_link_libraries(Joynet lua zlib Threads::Threads)
 endif()
 
 set_target_properties(Joynet PROPERTIES LINKER_LANGUAGE CXX)

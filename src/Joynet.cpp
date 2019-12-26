@@ -7,23 +7,21 @@
 #include <chrono>
 #include <thread>
 
-#include <brynet/net/SocketLibFunction.h>
-#include <brynet/utils/ox_file.h>
+#include <brynet/net/SocketLibFunction.hpp>
 
-#include <brynet/net/EventLoop.h>
-#include <brynet/net/TcpConnection.h>
-#include <brynet/net/TCPService.h>
-#include <brynet/net/ListenThread.h>
-#include <brynet/net/Connector.h>
-#include <brynet/timer/Timer.h>
+#include <brynet/net/EventLoop.hpp>
+#include <brynet/net/TcpConnection.hpp>
+#include <brynet/net/TcpService.hpp>
+#include <brynet/net/ListenThread.hpp>
+#include <brynet/net/AsyncConnector.hpp>
+#include <brynet/base/Timer.hpp>
 
-#include <brynet/utils/NonCopyable.h>
-#include <brynet/utils/md5calc.h>
-#include <brynet/utils/SHA1.h>
-#include <brynet/utils/base64.h>
-#include <brynet/net/http/WebSocketFormat.h>
-#include <brynet/net/SSLHelper.h>
-#include <brynet/net/Any.h>
+#include <brynet/base/NonCopyable.hpp>
+#include <brynet/base/crypto/SHA1.hpp>
+#include <brynet/base/crypto/Base64.hpp>
+#include <brynet/net/http/WebSocketFormat.hpp>
+#include <brynet/net/SSLHelper.hpp>
+#include <brynet/base/Any.hpp>
 
 #include "lua_tinker.h"
 #include "utils.h"
@@ -130,7 +128,7 @@ static void luaRuntimeCheck(lua_State *L, lua_Debug *ar)
     }
 }
 
-class CoreDD final : public brynet::utils::NonCopyable
+class CoreDD final : public brynet::base::NonCopyable
 {
 public:
     CoreDD()
@@ -290,12 +288,12 @@ public:
 
         const auto uid = mAsyncConnectIDCreator.claim();
         mAsyncConnector->asyncConnect({
-                AsyncConnector::ConnectOptions::WithAddr(ip, port),
-                AsyncConnector::ConnectOptions::WithTimeout(std::chrono::milliseconds(timeoutMs)),
-                AsyncConnector::ConnectOptions::WithCompletedCallback([=](TcpSocket::Ptr socket) {
+                ConnectOption::WithAddr(ip, port),
+                ConnectOption::WithTimeout(std::chrono::milliseconds(timeoutMs)),
+                ConnectOption::WithCompletedCallback([=](TcpSocket::Ptr socket) {
                     addSessionToService(serviceID, std::move(socket), uid, useSSL, false);
                 }),
-                AsyncConnector::ConnectOptions::WithFailedCallback([=]() {
+                ConnectOption::WithFailedCallback([=]() {
                     mLogicLoop.runAsyncFunctor([serviceID, uid]() {
                         lua_tinker::call<void>(L, "__on_connected__", serviceID, -1, uid, false);
                     });
@@ -361,7 +359,7 @@ public:
         auto initHandle = [=](TcpSocket::Ptr socket) {
             auto enterHandle = [=](const TcpConnection::Ptr& tcpConnection) {
                 mLogicLoop.runAsyncFunctor([=]() {
-                    auto socketID = brynet::net::cast<SocketIDType>(tcpConnection->getUD());
+                    auto socketID = brynet::base::cast<SocketIDType>(tcpConnection->getUD());
                     lua_tinker::call<void>(L, 
                         "__on_enter__", 
                         service->getServiceID(),
@@ -392,7 +390,7 @@ private:
 
         auto connectedCallback = [=](const TcpConnection::Ptr& tcpConnection) {
             mLogicLoop.runAsyncFunctor([=]() {
-                auto socketID = brynet::net::cast<SocketIDType>(tcpConnection->getUD());
+                auto socketID = brynet::base::cast<SocketIDType>(tcpConnection->getUD());
                 lua_tinker::call<void>(L, 
                     "__on_connected__", 
                     serviceID, 
@@ -424,7 +422,7 @@ private:
 
             auto disConnectHanale = [=](const TcpConnection::Ptr tcpConnection) {
                 mLogicLoop.runAsyncFunctor([=]() {
-                    auto socketID = brynet::net::cast<SocketIDType>(tcpConnection->getUD());
+                    auto socketID = brynet::base::cast<SocketIDType>(tcpConnection->getUD());
                     luaTcpService->removeTcpConnection(*socketID);
                     lua_tinker::call<void>(L, 
                         "__on_close__", 
@@ -436,7 +434,7 @@ private:
             auto datahandle = [=](const char* buffer, size_t len) {
                 auto data = std::string(buffer, len);
                 mLogicLoop.runAsyncFunctor([=]() {
-                    auto socketID = brynet::net::cast<SocketIDType>(tcpConnection->getUD());
+                    auto socketID = brynet::base::cast<SocketIDType>(tcpConnection->getUD());
                     int consumeLen = lua_tinker::call<int>(L,
                         "__on_data__",
                         luaTcpService->getServiceID(),
@@ -452,26 +450,34 @@ private:
             tcpConnection->setDataCallback(datahandle);
         };
 
-        TcpService::AddSocketOption::AddSocketOptionFunc sslOption;
+#ifdef BRYNET_USE_OPENSSL
+        detail::AddSocketOptionFunc sslOption;
         if (useSSL)
         {
             if (isServerSideSocket)
             {
                 if (luaTcpService->getSSLHelper() != nullptr)
                 {
-                    sslOption = TcpService::AddSocketOption::WithServerSideSSL(luaTcpService->getSSLHelper());
+                    sslOption = AddSocketOption::WithServerSideSSL(luaTcpService->getSSLHelper());
                 }
             }
             else
             {
-                sslOption = TcpService::AddSocketOption::WithClientSideSSL();
+                sslOption = AddSocketOption::WithClientSideSSL();
             }
         }
         return luaTcpService->getTcpService()->addTcpConnection(
             std::move(socket),
             sslOption,
-            TcpService::AddSocketOption::AddEnterCallback(wrapperEnterCallback),
-            TcpService::AddSocketOption::WithMaxRecvBufferSize(1024 * 1024));
+            AddSocketOption::AddEnterCallback(wrapperEnterCallback),
+            AddSocketOption::WithMaxRecvBufferSize(1024 * 1024));
+#else
+
+        return luaTcpService->getTcpService()->addTcpConnection(
+            std::move(socket),
+            AddSocketOption::AddEnterCallback(wrapperEnterCallback),
+            AddSocketOption::WithMaxRecvBufferSize(1024 * 1024));
+#endif
     }
 
     LuaTcpService::PTR  findService(int serviceID)
@@ -488,7 +494,7 @@ private:
     EventLoop                                   mLogicLoop;
 
     Joynet::IdCreator                           mTimerIDCreator;
-    std::unordered_map<TimerIDType, brynet::timer::Timer::WeakPtr> mTimerList;
+    std::unordered_map<TimerIDType, brynet::base::Timer::WeakPtr> mTimerList;
 
     AsyncConnector::Ptr                         mAsyncConnector;
     Joynet::IdCreator                           mAsyncConnectIDCreator;
@@ -542,10 +548,7 @@ __declspec(dllexport)
         lua_tinker::class_def<CoreDD>(L, "asyncConnect", &CoreDD::asyncConnect);
         lua_tinker::class_def<CoreDD>(L, "setupSSL", &CoreDD::setupSSL);
 
-        lua_tinker::def(L, "UtilsSha1", Joynet::luaSha1);
-        lua_tinker::def(L, "UtilsMd5", Joynet::luaMd5);
         lua_tinker::def(L, "GetIPOfHost", Joynet::GetIPOfHost);
-        lua_tinker::def(L, "UtilsCreateDir", ox_dir_create);
         lua_tinker::def(L, "UtilsWsHandshakeResponse", Joynet::UtilsWsHandshakeResponse);
     #ifdef USE_ZLIB
         lua_tinker::def(L, "ZipUnCompress", Joynet::ZipUnCompress);

@@ -2,8 +2,8 @@
 #define _JOYNET_UTILS_H
 
 #include <chrono>
-#include <brynet/utils/NonCopyable.h>
-#include <brynet/net/http/WebSocketFormat.h>
+#include <brynet/base/NonCopyable.hpp>
+#include <brynet/net/http/WebSocketFormat.hpp>
 
 #ifdef USE_ZLIB
 #include <zlib.h>
@@ -14,7 +14,7 @@ namespace Joynet
     using namespace brynet;
     using namespace brynet::net;
 
-    class IdCreator : public brynet::utils::NonCopyable
+    class IdCreator : public brynet::base::NonCopyable
     {
     public:
         IdCreator()
@@ -34,27 +34,6 @@ namespace Joynet
     private:
         int32_t     mIncID;
     };
-
-    static std::string luaSha1(const std::string& str)
-    {
-        CSHA1 sha1;
-        sha1.Update((unsigned char*)str.c_str(), str.size());
-        sha1.Final();
-        return std::string((char*)sha1.m_digest, sizeof(sha1.m_digest));
-    }
-
-    static std::string luaMd5(const char* str)
-    {
-        char digest[1024];
-        memset(digest, 0, sizeof(digest));
-        MD5_String(str, digest);
-        return std::string((const char*)digest, 32);
-    }
-
-    static std::string luaBase64(const std::string& str)
-    {
-        return base64_encode((const unsigned char *)str.c_str(), str.size());
-    }
 
     static std::string GetIPOfHost(const std::string& host)
     {
