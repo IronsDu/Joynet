@@ -17,7 +17,7 @@ if(WIN32)
   target_link_libraries(Joynet ws2_32 lua)
 elseif(UNIX)
   find_package(Threads REQUIRED)
-  target_link_libraries(Joynet lua zlib Threads::Threads)
+  target_link_libraries(Joynet lua Threads::Threads)
 endif()
 
 set_target_properties(Joynet PROPERTIES LINKER_LANGUAGE CXX)
